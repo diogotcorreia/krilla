@@ -387,8 +387,9 @@ impl InternalPage {
     ) -> KrillaResult<()> {
         let mut annotation_refs = vec![];
 
-        if !self.annotations.is_empty() {
-            for annotation in &self.annotations {
+        let has_annotations = !self.annotations.is_empty();
+        if has_annotations {
+            for annotation in self.annotations {
                 let annot_ref = sc.new_ref();
 
                 annotation.serialize(
@@ -462,7 +463,7 @@ impl InternalPage {
         // check the target version.
         //
         // [1]: https://helpx.adobe.com/acrobat/using/create-verify-pdf-accessibility.html#TabOrder "Create and verify PDF accessibility (Acrobat Pro): Tab order"
-        if (!self.annotations.is_empty()
+        if (has_annotations
             || ((sc
                 .serialize_settings()
                 .validators()

@@ -20,7 +20,9 @@ use crate::interactive::action::Action;
 use crate::interactive::destination::Destination;
 use crate::page::page_root_transform;
 use crate::serialize::SerializeContext;
+use crate::stream::Stream;
 use crate::surface::Location;
+use crate::xobject::XObject;
 
 /// An annotation.
 pub struct Annotation {
@@ -62,37 +64,28 @@ impl From<LinkAnnotation> for Annotation {
     }
 }
 
+impl From<WidgetAnnotation> for Annotation {
+    fn from(value: WidgetAnnotation) -> Self {
+        Self {
+            annotation_type: AnnotationType::Widget(value),
+            alt: None,
+            struct_parent: None,
+            location: None,
+        }
+    }
+}
+
 impl Annotation {
     pub(crate) fn serialize(
-        &self,
+        self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         root_ref: Ref,
         page_height: f32,
     ) -> KrillaResult<()> {
-        let chunk = &mut chunk_container.non_stream.annotations;
-        let mut annotation = chunk
-            .indirect(root_ref)
-            .start::<pdf_writer::writers::Annotation>();
-
-        self.annotation_type
-            .serialize_type(sc, &mut annotation, page_height)?;
-
-        let AnnotationType::Link(l) = &self.annotation_type;
-        // Only set the print flag when really necessary (only PDF/A). Don't
-        // set it by default, so annotations with color borders will be shown
-        // on a screen but not printed.
-        // TODO: No need to write the print flag even if it is `None`,
-        // only for PDF/A.
-        if l.border.is_none()
-            || sc
-                .serialize_settings()
-                .configuration
-                .validators()
-                .requires_annotation_flags()
-        {
-            annotation.flags(AnnotationFlags::PRINT);
-        }
+        let mut annotation =
+            self.annotation_type
+                .serialize_type(sc, chunk_container, root_ref, page_height)?;
 
         if let Some(struct_parent) = self.struct_parent {
             annotation.struct_parent(struct_parent);
@@ -116,17 +109,23 @@ impl Annotation {
 pub enum AnnotationType {
     /// A link annotation.
     Link(LinkAnnotation),
+    /// A widget annotation.
+    Widget(WidgetAnnotation),
 }
 
 impl AnnotationType {
-    fn serialize_type(
-        &self,
+    fn serialize_type<'a>(
+        self,
         sc: &mut SerializeContext,
-        annotation: &mut pdf_writer::writers::Annotation,
+        chunk_container: &'a mut ChunkContainer,
+        root_ref: Ref,
         page_height: f32,
-    ) -> KrillaResult<()> {
+    ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
         match self {
-            AnnotationType::Link(l) => l.serialize_type(sc, annotation, page_height),
+            AnnotationType::Link(l) => l.serialize_type(sc, chunk_container, root_ref, page_height),
+            AnnotationType::Widget(w) => {
+                w.serialize_type(sc, chunk_container, root_ref, page_height)
+            }
         }
     }
 }
@@ -227,12 +226,18 @@ impl LinkAnnotation {
         }
     }
 
-    fn serialize_type(
-        &self,
+    fn serialize_type<'a>(
+        self,
         sc: &mut SerializeContext,
-        annotation: &mut pdf_writer::writers::Annotation,
+        chunk_container: &'a mut ChunkContainer,
+        root_ref: Ref,
         page_height: f32,
-    ) -> KrillaResult<()> {
+    ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
+        let chunk = &mut chunk_container.non_stream.annotations;
+        let mut annotation = chunk
+            .indirect(root_ref)
+            .start::<pdf_writer::writers::Annotation>();
+
         annotation.subtype(pdf_writer::types::AnnotationType::Link);
 
         let actual_rect = self
@@ -275,9 +280,100 @@ impl LinkAnnotation {
 
         match &self.target {
             Target::Destination(destination) => {
-                destination.serialize(sc, annotation.insert(Name(b"Dest")))
+                destination.serialize(sc, annotation.insert(Name(b"Dest")))?
             }
-            Target::Action(action) => action.serialize(sc, annotation.action()),
+            Target::Action(action) => action.serialize(sc, annotation.action())?,
         }
+
+        // Only set the print flag when really necessary (only PDF/A). Don't
+        // set it by default, so annotations with color borders will be shown
+        // on a screen but not printed.
+        // TODO: No need to write the print flag even if it is `None`,
+        // only for PDF/A.
+        if self.border.is_none()
+            || sc
+                .serialize_settings()
+                .configuration
+                .validators()
+                .requires_annotation_flags()
+        {
+            annotation.flags(AnnotationFlags::PRINT);
+        }
+
+        Ok(annotation)
     }
+}
+
+/// A widget annotation.
+// TODO keep this public? or abstract into form fields?
+#[allow(missing_docs)]
+pub struct WidgetAnnotation {
+    pub field_name: String,
+    pub rect: Rect,
+    pub appearance: AnnotationAppearance,
+}
+
+impl WidgetAnnotation {
+    fn serialize_type<'a>(
+        self,
+        sc: &mut SerializeContext,
+        chunk_container: &'a mut ChunkContainer,
+        root_ref: Ref,
+        page_height: f32,
+    ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
+        let normal_appearance_ref =
+            WidgetAnnotation::serialize_appearance(sc, chunk_container, self.appearance.normal);
+        let rollover_appearance_ref = self
+            .appearance
+            .rollover
+            .map(|stream| WidgetAnnotation::serialize_appearance(sc, chunk_container, stream));
+        let down_appearance_ref = self
+            .appearance
+            .down
+            .map(|stream| WidgetAnnotation::serialize_appearance(sc, chunk_container, stream));
+
+        let chunk = &mut chunk_container.non_stream.annotations;
+        let mut annotation = chunk
+            .indirect(root_ref)
+            .start::<pdf_writer::writers::Annotation>();
+        annotation.subtype(pdf_writer::types::AnnotationType::Widget);
+
+        let actual_rect = self
+            .rect
+            .transform(page_root_transform(page_height))
+            .unwrap();
+        annotation.rect(actual_rect.to_pdf_rect());
+
+        let mut appearance = annotation.appearance();
+        appearance.normal().stream(normal_appearance_ref);
+        if let Some(rollover_ref) = rollover_appearance_ref {
+            appearance.rollover().stream(rollover_ref);
+        }
+        if let Some(down_ref) = down_appearance_ref {
+            appearance.alternate().stream(down_ref);
+        }
+        appearance.finish();
+
+        sc.global_objects
+            .forms
+            .register_annotation(self.field_name, root_ref);
+
+        Ok(annotation)
+    }
+
+    fn serialize_appearance<'a>(
+        sc: &mut SerializeContext,
+        chunk_container: &'a mut ChunkContainer,
+        appearance: Stream,
+    ) -> Ref {
+        let xobject = XObject::new(appearance, false, false, None);
+        sc.register_cacheable(chunk_container, xobject)
+    }
+}
+
+#[allow(missing_docs)]
+pub struct AnnotationAppearance {
+    pub normal: Stream,
+    pub rollover: Option<Stream>,
+    pub down: Option<Stream>,
 }

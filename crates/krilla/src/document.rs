@@ -17,6 +17,7 @@
 use crate::chunk_container::ChunkContainer;
 use crate::destination::NamedDestination;
 use crate::error::KrillaResult;
+use crate::forms::PushButtonField;
 use crate::interchange::embed::EmbeddedFile;
 use crate::interchange::metadata::Metadata;
 use crate::interchange::outline::Outline;
@@ -123,6 +124,11 @@ impl Document {
     pub fn embed_file(&mut self, file: EmbeddedFile) -> Option<()> {
         self.serializer_context
             .embed_file(&mut self.chunk_container, file)
+    }
+
+    #[allow(missing_docs)]
+    pub fn add_field(&mut self, field: PushButtonField) {
+        self.serializer_context.add_field(field);
     }
 
     /// Manually register a global named destination.
