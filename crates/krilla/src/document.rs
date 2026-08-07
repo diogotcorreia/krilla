@@ -17,7 +17,7 @@
 use crate::chunk_container::ChunkContainer;
 use crate::destination::NamedDestination;
 use crate::error::KrillaResult;
-use crate::forms::PushButtonField;
+use crate::forms::{FieldKind, FormField};
 use crate::interchange::embed::EmbeddedFile;
 use crate::interchange::metadata::Metadata;
 use crate::interchange::outline::Outline;
@@ -127,7 +127,7 @@ impl Document {
     }
 
     #[allow(missing_docs)]
-    pub fn add_field(&mut self, field: PushButtonField) {
+    pub fn add_field(&mut self, field: FieldKind) {
         self.serializer_context.add_field(field);
     }
 

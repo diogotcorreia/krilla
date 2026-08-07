@@ -64,8 +64,8 @@ impl From<LinkAnnotation> for Annotation {
     }
 }
 
-impl From<WidgetAnnotation> for Annotation {
-    fn from(value: WidgetAnnotation) -> Self {
+impl From<WidgetAnnotationKind> for Annotation {
+    fn from(value: WidgetAnnotationKind) -> Self {
         Self {
             annotation_type: AnnotationType::Widget(value),
             alt: None,
@@ -110,7 +110,7 @@ pub enum AnnotationType {
     /// A link annotation.
     Link(LinkAnnotation),
     /// A widget annotation.
-    Widget(WidgetAnnotation),
+    Widget(WidgetAnnotationKind),
 }
 
 impl AnnotationType {
@@ -305,15 +305,90 @@ impl LinkAnnotation {
 }
 
 /// A widget annotation.
-// TODO keep this public? or abstract into form fields?
 #[allow(missing_docs)]
-pub struct WidgetAnnotation {
-    pub field_name: String,
-    pub rect: Rect,
-    pub appearance: AnnotationAppearance,
+pub struct WidgetAnnotation<T> {
+    field_name: String,
+    rect: Rect,
+    appearance: T,
+    action: Option<Action>,
 }
 
-impl WidgetAnnotation {
+#[allow(missing_docs)]
+impl<T> WidgetAnnotation<T> {
+    pub fn set_action(&mut self, action: Action) {
+        self.action = Some(action);
+    }
+}
+
+#[allow(missing_docs)]
+impl WidgetAnnotation<SimpleAppearance> {
+    pub(crate) fn simple(field_name: String, rect: Rect, appearance: Stream) -> Self {
+        Self {
+            field_name,
+            rect,
+            appearance: SimpleAppearance {
+                normal: appearance,
+                rollover: None,
+                down: None,
+            },
+            action: None,
+        }
+    }
+
+    pub fn set_rollover_appearance(&mut self, appearance: Stream) {
+        self.appearance.rollover = Some(appearance);
+    }
+    pub fn set_down_appearance(&mut self, appearance: Stream) {
+        self.appearance.down = Some(appearance);
+    }
+}
+
+#[allow(missing_docs)]
+impl WidgetAnnotation<DualStateAppearance> {
+    pub(crate) fn dual(
+        field_name: String,
+        rect: Rect,
+        off_state: String,
+        off_appearance: Stream,
+        on_state: String,
+        on_appearance: Stream,
+    ) -> Self {
+        Self {
+            field_name,
+            rect,
+            appearance: DualStateAppearance {
+                off_state,
+                off_appearance: SimpleAppearance {
+                    normal: off_appearance,
+                    rollover: None,
+                    down: None,
+                },
+                on_state,
+                on_appearance: SimpleAppearance {
+                    normal: on_appearance,
+                    rollover: None,
+                    down: None,
+                },
+            },
+            action: None,
+        }
+    }
+
+    pub fn set_off_rollover_appearance(&mut self, appearance: Stream) {
+        self.appearance.off_appearance.rollover = Some(appearance);
+    }
+    pub fn set_on_rollover_appearance(&mut self, appearance: Stream) {
+        self.appearance.on_appearance.rollover = Some(appearance);
+    }
+    pub fn set_off_down_appearance(&mut self, appearance: Stream) {
+        self.appearance.off_appearance.down = Some(appearance);
+    }
+    pub fn set_on_down_appearance(&mut self, appearance: Stream) {
+        self.appearance.on_appearance.down = Some(appearance);
+    }
+}
+
+impl<T: SerializeAppearance> WidgetAnnotation<T> {
     fn serialize_type<'a>(
         self,
         sc: &mut SerializeContext,
@@ -321,16 +396,7 @@ impl WidgetAnnotation {
         root_ref: Ref,
         page_height: f32,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
-        let normal_appearance_ref =
-            WidgetAnnotation::serialize_appearance(sc, chunk_container, self.appearance.normal);
-        let rollover_appearance_ref = self
-            .appearance
-            .rollover
-            .map(|stream| WidgetAnnotation::serialize_appearance(sc, chunk_container, stream));
-        let down_appearance_ref = self
-            .appearance
-            .down
-            .map(|stream| WidgetAnnotation::serialize_appearance(sc, chunk_container, stream));
+        let appearance_refs = self.appearance.register_refs(sc, chunk_container);
 
         let chunk = &mut chunk_container.non_stream.annotations;
         let mut annotation = chunk
@@ -344,15 +410,13 @@ impl WidgetAnnotation {
             .unwrap();
         annotation.rect(actual_rect.to_pdf_rect());
 
-        let mut appearance = annotation.appearance();
-        appearance.normal().stream(normal_appearance_ref);
-        if let Some(rollover_ref) = rollover_appearance_ref {
-            appearance.rollover().stream(rollover_ref);
+        if let Some(action) = &self.action {
+            action.serialize(sc, annotation.additional_actions().annot_mouse_press())?;
         }
-        if let Some(down_ref) = down_appearance_ref {
-            appearance.alternate().stream(down_ref);
-        }
-        appearance.finish();
+
+        annotation.flags(AnnotationFlags::PRINT);
+
+        T::serialize_appearance(&mut annotation, appearance_refs);
 
         sc.global_objects
             .forms
@@ -360,10 +424,50 @@ impl WidgetAnnotation {
 
         Ok(annotation)
     }
+}
 
-    fn serialize_appearance<'a>(
+#[allow(missing_docs)]
+pub enum WidgetAnnotationKind {
+    Simple(WidgetAnnotation<SimpleAppearance>),
+    DualState(WidgetAnnotation<DualStateAppearance>),
+}
+
+impl WidgetAnnotationKind {
+    fn serialize_type<'a>(
+        self,
         sc: &mut SerializeContext,
         chunk_container: &'a mut ChunkContainer,
+        root_ref: Ref,
+        page_height: f32,
+    ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
+        match self {
+            WidgetAnnotationKind::Simple(a) => {
+                a.serialize_type(sc, chunk_container, root_ref, page_height)
+            }
+            WidgetAnnotationKind::DualState(a) => {
+                a.serialize_type(sc, chunk_container, root_ref, page_height)
+            }
+        }
+    }
+}
+
+pub(crate) trait SerializeAppearance {
+    // TODO: refactor, this is the only way I could find to make the borrow checker happy
+    type RefsHolder;
+
+    fn register_refs(
+        self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+    ) -> Self::RefsHolder;
+    fn serialize_appearance(
+        annotation: &mut pdf_writer::writers::Annotation<'_>,
+        refs: Self::RefsHolder,
+    );
+
+    fn register_appearance_entry(
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
         appearance: Stream,
     ) -> Ref {
         let xobject = XObject::new(appearance, false, false, None);
@@ -372,8 +476,131 @@ impl WidgetAnnotation {
 }
 
 #[allow(missing_docs)]
-pub struct AnnotationAppearance {
-    pub normal: Stream,
-    pub rollover: Option<Stream>,
-    pub down: Option<Stream>,
+pub struct SimpleAppearance {
+    normal: Stream,
+    rollover: Option<Stream>,
+    down: Option<Stream>,
+}
+
+#[allow(missing_docs)]
+pub struct DualStateAppearance {
+    off_state: String,
+    off_appearance: SimpleAppearance,
+    on_state: String,
+    on_appearance: SimpleAppearance,
+}
+
+impl From<WidgetAnnotation<SimpleAppearance>> for WidgetAnnotationKind {
+    fn from(value: WidgetAnnotation<SimpleAppearance>) -> Self {
+        Self::Simple(value)
+    }
+}
+
+impl From<WidgetAnnotation<DualStateAppearance>> for WidgetAnnotationKind {
+    fn from(value: WidgetAnnotation<DualStateAppearance>) -> Self {
+        Self::DualState(value)
+    }
+}
+
+impl<T> From<WidgetAnnotation<T>> for Annotation
+where
+    WidgetAnnotation<T>: Into<WidgetAnnotationKind>,
+{
+    fn from(value: WidgetAnnotation<T>) -> Self {
+        Into::<WidgetAnnotationKind>::into(value).into()
+    }
+}
+
+impl SerializeAppearance for SimpleAppearance {
+    type RefsHolder = (Ref, Option<Ref>, Option<Ref>);
+
+    fn register_refs(
+        self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+    ) -> Self::RefsHolder {
+        let normal_ref = Self::register_appearance_entry(sc, chunk_container, self.normal);
+        let rollover_ref = self
+            .rollover
+            .map(|stream| Self::register_appearance_entry(sc, chunk_container, stream));
+        let down_ref = self
+            .down
+            .map(|stream| Self::register_appearance_entry(sc, chunk_container, stream));
+
+        (normal_ref, rollover_ref, down_ref)
+    }
+
+    fn serialize_appearance(
+        annotation: &mut pdf_writer::writers::Annotation<'_>,
+        refs: Self::RefsHolder,
+    ) {
+        let mut appearance = annotation.appearance();
+        appearance.normal().stream(refs.0);
+        if let Some(ref_) = refs.1 {
+            appearance.rollover().stream(ref_);
+        }
+        if let Some(ref_) = refs.2 {
+            appearance.alternate().stream(ref_);
+        }
+    }
+}
+
+impl SerializeAppearance for DualStateAppearance {
+    type RefsHolder = (
+        (String, Ref, Option<Ref>, Option<Ref>), // off
+        (String, Ref, Option<Ref>, Option<Ref>), // on
+    );
+
+    fn register_refs(
+        self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+    ) -> Self::RefsHolder {
+        let off_refs = self.off_appearance.register_refs(sc, chunk_container);
+        let on_refs = self.on_appearance.register_refs(sc, chunk_container);
+
+        (
+            (self.off_state, off_refs.0, off_refs.1, off_refs.2),
+            (self.on_state, on_refs.0, on_refs.1, on_refs.2),
+        )
+    }
+
+    fn serialize_appearance(
+        annotation: &mut pdf_writer::writers::Annotation<'_>,
+        refs: Self::RefsHolder,
+    ) {
+        let (off, on) = refs;
+        let off_name = Name(off.0.as_bytes());
+        let on_name = Name(on.0.as_bytes());
+
+        // TODO: this should come from checkbox/radio group
+        annotation.appearance_state(off_name);
+
+        let mut appearance = annotation.appearance();
+        appearance
+            .normal()
+            .streams()
+            .pair(off_name, off.1)
+            .pair(on_name, on.1);
+        if off.2.is_some() || on.2.is_some() {
+            let mut dict = appearance.rollover().streams();
+
+            if let Some(ref_) = off.2 {
+                dict.pair(off_name, ref_);
+            }
+            if let Some(ref_) = on.2 {
+                dict.pair(on_name, ref_);
+            }
+        }
+        if off.3.is_some() || on.3.is_some() {
+            let mut dict = appearance.alternate().streams();
+
+            if let Some(ref_) = off.3 {
+                dict.pair(off_name, ref_);
+            }
+            if let Some(ref_) = on.3 {
+                dict.pair(on_name, ref_);
+            }
+        }
+    }
 }
