@@ -128,6 +128,8 @@ impl<T: SerializableField> FormField<T> {
     ) {
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
+        field.partial_name(TextStr(&self.name));
+
         self.kind.serialize_field(&mut field);
 
         if let Some(children) = annotations {
