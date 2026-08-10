@@ -418,6 +418,19 @@ impl<T: SerializeAppearance> WidgetAnnotation<T> {
 
         T::serialize_appearance(&mut annotation, appearance_refs);
 
+        let parent_ref = sc
+            .global_objects
+            .forms
+            .get_field_ref(&self.field_name)
+            .unwrap_or_else(|| {
+                let ref_ = sc.new_ref();
+                sc.global_objects
+                    .forms
+                    .register_field_ref(self.field_name.clone(), ref_);
+                ref_
+            });
+        annotation.parent(parent_ref);
+
         sc.global_objects
             .forms
             .register_annotation(self.field_name, root_ref);

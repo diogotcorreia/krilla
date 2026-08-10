@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use pdf_writer::{writers::Form, Finish, Ref};
+use pdf_writer::{writers::Form, Finish, Ref, TextStr};
 
 use crate::{
     annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
@@ -15,6 +15,7 @@ use crate::{
 
 #[derive(Default)]
 pub(crate) struct AcroForm {
+    field_refs: HashMap<String, Ref>,
     annotations: HashMap<String, Vec<Ref>>,
     fields: Vec<FieldKind>,
 }
@@ -25,6 +26,15 @@ impl AcroForm {
             .entry(field_name)
             .or_insert_with(|| Vec::with_capacity(1))
             .push(annotation_ref);
+    }
+
+    pub(crate) fn get_field_ref(&mut self, field_name: &str) -> Option<Ref> {
+        self.field_refs.get(field_name).copied()
+    }
+
+    pub(crate) fn register_field_ref(&mut self, field_name: String, field_ref: Ref) {
+        debug_assert!(!self.field_refs.contains_key(&field_name));
+        self.field_refs.insert(field_name, field_ref);
     }
 
     pub(crate) fn register_field(&mut self, field: FieldKind) {
@@ -41,7 +51,11 @@ impl AcroForm {
         let mut form = chunk.indirect(root_ref).start::<Form>();
 
         let fields = self.fields.iter().map(|field| {
-            let ref_ = sc.new_ref();
+            let ref_ = self
+                .field_refs
+                .get(field.get_name())
+                .copied()
+                .unwrap_or_else(|| sc.new_ref());
             field.serialize_field(
                 sc,
                 chunk_container,
