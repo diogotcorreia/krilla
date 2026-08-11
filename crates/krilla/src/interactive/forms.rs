@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use pdf_writer::{writers::Form, Finish, Ref, TextStr};
+use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
     annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
@@ -71,10 +71,36 @@ impl AcroForm {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FormField<T> {
     name: String,
+    alt_name: Option<String>,
+    mapping_name: Option<String>,
+    flags: FieldFlags,
     kind: T,
+}
+
+#[allow(missing_docs)]
+impl<T> FormField<T> {
+    pub fn set_alt_name(&mut self, alt_name: String) {
+        self.alt_name = Some(alt_name);
+    }
+
+    pub fn set_mapping_name(&mut self, mapping_name: String) {
+        self.mapping_name = Some(mapping_name);
+    }
+
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.flags.set(FieldFlags::READ_ONLY, read_only);
+    }
+
+    pub fn set_required(&mut self, required: bool) {
+        self.flags.set(FieldFlags::REQUIRED, required);
+    }
+
+    pub fn set_export(&mut self, export: bool) {
+        self.flags.set(FieldFlags::NO_EXPORT, !export);
+    }
 }
 
 #[allow(missing_docs)]
@@ -82,6 +108,7 @@ impl FormField<kind::PushButton> {
     pub fn push_button(name: String) -> Self {
         Self {
             name,
+            flags: FieldFlags::PUSHBUTTON,
             ..Default::default()
         }
     }
@@ -130,6 +157,7 @@ impl FormField<kind::Radio> {
     pub fn radio(name: String) -> Self {
         Self {
             name,
+            flags: FieldFlags::RADIO,
             ..Default::default()
         }
     }
@@ -140,6 +168,14 @@ impl FormField<kind::Radio> {
 
     pub fn set_default_value(&mut self, value: String) {
         self.kind.default_value = Some(value);
+    }
+
+    pub fn set_allow_toggling_off(&mut self, allow_off: bool) {
+        self.flags.set(FieldFlags::NO_TOGGLE_TO_OFF, !allow_off);
+    }
+
+    pub fn set_radios_in_unison(&mut self, in_unison: bool) {
+        self.flags.set(FieldFlags::RADIOS_IN_UNISON, in_unison);
     }
 
     pub fn new_widget(
@@ -170,12 +206,26 @@ impl<T: SerializableField> FormField<T> {
     ) {
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
-        field.partial_name(TextStr(&self.name));
+        field
+            .partial_name(TextStr(&self.name))
+            .field_flags(self.flags);
 
         self.kind.serialize_field(&mut field);
 
         if let Some(children) = annotations {
             field.children(children.iter().copied());
+        }
+    }
+}
+
+impl<T: Default> Default for FormField<T> {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            alt_name: Default::default(),
+            mapping_name: Default::default(),
+            flags: FieldFlags::empty(),
+            kind: Default::default(),
         }
     }
 }
@@ -211,15 +261,12 @@ impl FieldKind {
     }
 }
 
-trait SerializableField {
+pub(crate) trait SerializableField {
     fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>);
 }
 
 mod kind {
-    use pdf_writer::{
-        types::{CheckBoxState, FieldFlags},
-        Name,
-    };
+    use pdf_writer::{types::CheckBoxState, Name};
 
     use super::SerializableField;
 
@@ -229,9 +276,7 @@ mod kind {
 
     impl SerializableField for PushButton {
         fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
-            field
-                .field_type(pdf_writer::types::FieldType::Button)
-                .field_flags(FieldFlags::PUSHBUTTON);
+            field.field_type(pdf_writer::types::FieldType::Button);
         }
     }
 
