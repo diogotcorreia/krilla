@@ -1,6 +1,9 @@
 //! TODO
 
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeSet, HashMap},
+    iter::Peekable,
+};
 
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
@@ -16,7 +19,7 @@ use crate::{
 pub(crate) struct AcroForm {
     field_refs: HashMap<String, Ref>,
     annotations: HashMap<String, Vec<Ref>>,
-    fields: Vec<FieldKind>,
+    fields: BTreeSet<FieldKind>,
 }
 
 impl AcroForm {
@@ -37,7 +40,7 @@ impl AcroForm {
     }
 
     pub(crate) fn register_field(&mut self, field: FieldKind) {
-        self.fields.push(field);
+        self.fields.insert(field);
     }
 
     pub(crate) fn serialize(
@@ -49,24 +52,81 @@ impl AcroForm {
         let mut chunk = sc.new_chunk();
         let mut form = chunk.indirect(root_ref).start::<Form>();
 
-        let fields = self.fields.iter().map(|field| {
-            let ref_ = self
-                .field_refs
-                .get(field.get_name())
-                .copied()
-                .unwrap_or_else(|| sc.new_ref());
-            field.serialize_field(
-                sc,
-                chunk_container,
-                ref_,
-                self.annotations.get(field.get_name()).map(|v| v.as_slice()),
-            );
-            ref_
-        });
+        let fields = self.serialize_field_tree(
+            sc,
+            chunk_container,
+            None,
+            &[],
+            &mut self.fields.iter().peekable(),
+        );
+
         form.fields(fields);
         form.finish();
 
         chunk_container.non_stream.forms = Some((root_ref, chunk));
+    }
+
+    /// Turn a flat set of fields into a tree structure, as required by
+    /// the PDF specification. If a field name contains the dot (`.`)
+    /// separator, the intermediate fields are created automatically.
+    /// This function returns the references to the children of a given
+    /// level of the tree (if `parent` is empty, the returned refs are the
+    /// top-level fields, to be added to the AcroForm).
+    /// It is a logic error for a provided field to also be an intermediate
+    /// field (e.g., if foo.bar exists, foo cannot exist as well), and it might
+    /// result in an invalid PDF.
+    fn serialize_field_tree<'a>(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
+        parent: &[&'a str],
+        iter: &mut Peekable<impl Iterator<Item = &'a FieldKind>>,
+    ) -> Vec<Ref> {
+        let mut result = Vec::new();
+        loop {
+            let Some(field) = iter.peek() else {
+                return result;
+            };
+
+            let path: Vec<_> = field.get_name().split('.').collect();
+            if parent.len() >= path.len() || parent != &path[..parent.len()] {
+                return result;
+            }
+
+            if parent != &path[..(path.len() - 1)] {
+                let ref_ = sc.new_ref();
+                let children = self.serialize_field_tree(
+                    sc,
+                    chunk_container,
+                    Some(ref_),
+                    &path[..(parent.len() + 1)],
+                    iter,
+                );
+                let mut field = chunk_container.non_stream.fields.form_field(ref_);
+                if let Some(parent_ref) = parent_ref {
+                    field.parent(parent_ref);
+                }
+                field
+                    .children(children)
+                    .partial_name(TextStr(&path[parent.len()]));
+                result.push(ref_);
+            } else {
+                let field = iter.next().unwrap(); // peeked before, so we know it exists
+                let ref_ = self
+                    .field_refs
+                    .get(field.get_name())
+                    .copied()
+                    .unwrap_or_else(|| sc.new_ref());
+                field.serialize_field(
+                    sc,
+                    chunk_container,
+                    ref_,
+                    self.annotations.get(field.get_name()).map(|v| v.as_slice()),
+                );
+                result.push(ref_);
+            }
+        }
     }
 }
 
@@ -207,7 +267,7 @@ impl<T: SerializableField> FormField<T> {
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
         field
-            .partial_name(TextStr(&self.name))
+            .partial_name(TextStr(self.name.rsplit('.').next().unwrap_or(&self.name)))
             .field_flags(self.flags);
 
         self.kind.serialize_field(&mut field);
@@ -231,6 +291,7 @@ impl<T: Default> Default for FormField<T> {
 }
 
 #[allow(missing_docs)]
+#[derive(Debug, Clone)]
 pub enum FieldKind {
     PushButton(FormField<kind::PushButton>),
     Checkbox(FormField<kind::Checkbox>),
@@ -260,6 +321,26 @@ impl FieldKind {
         }
     }
 }
+
+impl Ord for FieldKind {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.get_name().cmp(other.get_name())
+    }
+}
+
+impl PartialOrd for FieldKind {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for FieldKind {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_name() == other.get_name()
+    }
+}
+
+impl Eq for FieldKind {}
 
 pub(crate) trait SerializableField {
     fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>);
