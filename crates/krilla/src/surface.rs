@@ -6,6 +6,8 @@
 
 use std::num::NonZeroU64;
 
+use pdf_writer::Name;
+
 use crate::chunk_container::ChunkContainer;
 use crate::color::rgb;
 use crate::configure::validate::VersionedFeature;
@@ -212,7 +214,7 @@ impl<'a> Surface<'a> {
 
                     Identifier::dummy()
                 }
-                ContentTag::Span(_) | ContentTag::Other => {
+                ContentTag::Span(_) | ContentTag::VariableText | ContentTag::Other => {
                     self.bd.get_mut().start_marked_content_with_properties(
                         self.sc,
                         Some(id.mcid),
@@ -234,6 +236,12 @@ impl<'a> Surface<'a> {
         if self.page_identifier.is_some() {
             self.bd.get_mut().end_marked_content();
         }
+    }
+
+    #[allow(missing_docs)]
+    pub fn insert_variable_text(&mut self) {
+        self.bd.get_mut().start_marked_content(Name(b"Tx"));
+        self.bd.get_mut().end_marked_content();
     }
 
     fn outline_glyphs(

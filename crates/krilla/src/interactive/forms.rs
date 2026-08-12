@@ -11,15 +11,16 @@ use crate::{
     annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
     chunk_container::ChunkContainer,
     geom::Rect,
+    resource::ResourceDictionaryBuilder,
     serialize::SerializeContext,
     stream::Stream,
 };
 
-#[derive(Default)]
 pub(crate) struct AcroForm {
     field_refs: HashMap<String, Ref>,
     annotations: HashMap<String, Vec<Ref>>,
     fields: BTreeSet<FieldKind>,
+    rd_builder: ResourceDictionaryBuilder,
 }
 
 impl AcroForm {
@@ -126,6 +127,17 @@ impl AcroForm {
                 );
                 result.push(ref_);
             }
+        }
+    }
+}
+
+impl Default for AcroForm {
+    fn default() -> Self {
+        Self {
+            field_refs: Default::default(),
+            annotations: Default::default(),
+            fields: Default::default(),
+            rd_builder: ResourceDictionaryBuilder::new(),
         }
     }
 }
@@ -256,6 +268,28 @@ impl FormField<kind::Radio> {
     }
 }
 
+#[allow(missing_docs)]
+impl FormField<kind::Text> {
+    pub fn text(name: String) -> Self {
+        Self {
+            name,
+            ..Default::default()
+        }
+    }
+
+    pub fn set_value(&mut self, value: String) {
+        self.kind.value = Some(value);
+    }
+
+    pub fn set_default_value(&mut self, value: String) {
+        self.kind.default_value = Some(value);
+    }
+
+    pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
+        WidgetAnnotation::simple(self.name.clone(), rect, appearance)
+    }
+}
+
 impl<T: SerializableField> FormField<T> {
     fn serialize_field(
         &self,
@@ -284,6 +318,7 @@ pub enum FieldKind {
     PushButton(FormField<kind::PushButton>),
     Checkbox(FormField<kind::Checkbox>),
     Radio(FormField<kind::Radio>),
+    Text(FormField<kind::Text>),
 }
 
 impl FieldKind {
@@ -298,6 +333,7 @@ impl FieldKind {
             Self::PushButton(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
             Self::Checkbox(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
             Self::Radio(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
+            Self::Text(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
         }
     }
 
@@ -306,6 +342,7 @@ impl FieldKind {
             Self::PushButton(f) => &f.name,
             Self::Checkbox(f) => &f.name,
             Self::Radio(f) => &f.name,
+            Self::Text(f) => &f.name,
         }
     }
 }
@@ -335,7 +372,9 @@ pub(crate) trait SerializableField {
 }
 
 mod kind {
-    use pdf_writer::{types::CheckBoxState, Name};
+    use pdf_writer::{types::CheckBoxState, Name, TextStr};
+
+    use crate::forms::variable_text::VariableAppearance;
 
     use super::SerializableField;
 
@@ -402,6 +441,26 @@ mod kind {
                 .radio_default_value(Name(default_value));
         }
     }
+
+    #[allow(missing_docs)]
+    #[derive(Debug, Clone, Default)]
+    pub struct Text {
+        pub(super) appearance: Option<VariableAppearance>,
+        pub(super) value: Option<String>,
+        pub(super) default_value: Option<String>,
+    }
+
+    impl SerializableField for Text {
+        fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
+            field.field_type(pdf_writer::types::FieldType::Text);
+            if let Some(value) = &self.value {
+                field.text_value(TextStr(value));
+            }
+            if let Some(value) = &self.default_value {
+                field.text_default_value(TextStr(value));
+            }
+        }
+    }
 }
 
 impl From<FormField<kind::PushButton>> for FieldKind {
@@ -419,5 +478,41 @@ impl From<FormField<kind::Checkbox>> for FieldKind {
 impl From<FormField<kind::Radio>> for FieldKind {
     fn from(value: FormField<kind::Radio>) -> Self {
         Self::Radio(value)
+    }
+}
+
+impl From<FormField<kind::Text>> for FieldKind {
+    fn from(value: FormField<kind::Text>) -> Self {
+        Self::Text(value)
+    }
+}
+
+mod variable_text {
+    use pdf_writer::Buf;
+
+    use crate::{
+        chunk_container::ChunkContainer, serialize::SerializeContext, text::Font, util::NameExt,
+    };
+
+    #[derive(Debug, Clone)]
+    pub struct VariableAppearance {
+        pub font: Font,
+        pub font_size: f32,
+    }
+
+    impl VariableAppearance {
+        pub(super) fn serialize(
+            &self,
+            sc: &mut SerializeContext,
+            chunk_container: &mut ChunkContainer,
+        ) -> Buf {
+            // TODO: somehow register the font
+            let font_name: String = todo!();
+
+            let mut content = sc.new_content();
+            content.set_font(font_name.to_pdf_name(), self.font_size);
+
+            content.finish()
+        }
     }
 }

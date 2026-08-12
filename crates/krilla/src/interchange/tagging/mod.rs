@@ -300,6 +300,9 @@ pub enum ContentTag<'a> {
     /// can obviously be shorter, if text within a single line contains text with different styles
     /// or different languages.
     Span(SpanTag<'a>),
+    /// The content of a text field.
+    /// TODO: expand docs
+    VariableText,
     /// Use this tag for anything else that does not semantically fit into `Span` or `Artifact`.
     /// This includes for example arbitrary paths, images or a mix of different content that cannot
     /// be split up more.
@@ -311,6 +314,7 @@ impl ContentTag<'_> {
         match self {
             ContentTag::Artifact(_) => Name(b"Artifact"),
             ContentTag::Span(_) => Name(b"Span"),
+            ContentTag::VariableText => Name(b"Tx"),
             ContentTag::Other => Name(b"P"),
         }
     }
@@ -378,7 +382,7 @@ impl ContentTag<'_> {
                     }
                 }
             }
-            ContentTag::Other => {}
+            ContentTag::VariableText | ContentTag::Other => {}
         }
     }
 }
