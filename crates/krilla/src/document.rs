@@ -17,7 +17,7 @@
 use crate::chunk_container::ChunkContainer;
 use crate::destination::NamedDestination;
 use crate::error::KrillaResult;
-use crate::forms::{FieldKind, FormField};
+use crate::forms::FieldTree;
 use crate::interchange::embed::EmbeddedFile;
 use crate::interchange::metadata::Metadata;
 use crate::interchange::outline::Outline;
@@ -112,6 +112,11 @@ impl Document {
         self.chunk_container.metadata = Some(metadata);
     }
 
+    #[allow(missing_docs)]
+    pub fn set_field_tree(&mut self, root: FieldTree) {
+        self.serializer_context.set_field_tree(root);
+    }
+
     /// Set the tag tree of the document.
     pub fn set_tag_tree(&mut self, tag_tree: TagTree) {
         self.serializer_context.set_tag_tree(tag_tree);
@@ -124,11 +129,6 @@ impl Document {
     pub fn embed_file(&mut self, file: EmbeddedFile) -> Option<()> {
         self.serializer_context
             .embed_file(&mut self.chunk_container, file)
-    }
-
-    #[allow(missing_docs)]
-    pub fn add_field(&mut self, field: FieldKind) {
-        self.serializer_context.add_field(field);
     }
 
     /// Manually register a global named destination.

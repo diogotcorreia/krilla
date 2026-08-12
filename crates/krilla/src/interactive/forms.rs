@@ -1,7 +1,5 @@
 //! TODO
 
-use std::{collections::BTreeSet, iter::Peekable};
-
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
@@ -15,14 +13,10 @@ use crate::{
 
 #[derive(Default)]
 pub(crate) struct AcroForm {
-    fields: BTreeSet<FieldKind>,
+    pub(crate) field_tree: FieldTree,
 }
 
 impl AcroForm {
-    pub(crate) fn register_field(&mut self, field: FieldKind) {
-        self.fields.insert(field);
-    }
-
     pub(crate) fn serialize(
         &self,
         sc: &mut SerializeContext,
@@ -32,70 +26,66 @@ impl AcroForm {
         let mut chunk = sc.new_chunk();
         let mut form = chunk.indirect(root_ref).start::<Form>();
 
-        let fields = self.serialize_field_tree(
-            sc,
-            chunk_container,
-            None,
-            &[],
-            &mut self.fields.iter().peekable(),
-        );
+        let fields = self
+            .field_tree
+            .fields
+            .iter()
+            .map(|node| node.serialize_node(sc, chunk_container));
 
         form.fields(fields);
         form.finish();
 
         chunk_container.non_stream.forms = Some((root_ref, chunk));
     }
+}
 
-    /// Turn a flat set of fields into a tree structure, as required by
-    /// the PDF specification. If a field name contains the dot (`.`)
-    /// separator, the intermediate fields are created automatically.
-    /// This function returns the references to the children of a given
-    /// level of the tree (if `parent` is empty, the returned refs are the
-    /// top-level fields, to be added to the AcroForm).
-    /// It is a logic error for a provided field to also be an intermediate
-    /// field (e.g., if foo.bar exists, foo cannot exist as well), and it might
-    /// result in an invalid PDF.
-    fn serialize_field_tree<'a>(
+#[allow(missing_docs)]
+#[derive(Default)]
+pub struct FieldTree {
+    pub fields: Vec<Node>,
+}
+
+#[allow(missing_docs)]
+pub struct FieldGroup {
+    pub name: String,
+    pub fields: Vec<Node>,
+}
+
+impl FieldGroup {
+    fn serialize_group(
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
-        parent_ref: Option<Ref>,
-        parent: &[&'a str],
-        iter: &mut Peekable<impl Iterator<Item = &'a FieldKind>>,
-    ) -> Vec<Ref> {
-        let mut result = Vec::new();
-        loop {
-            let Some(field) = iter.peek() else {
-                return result;
-            };
+    ) -> Ref {
+        let ref_ = sc.new_ref();
+        let children: Vec<_> = self
+            .fields
+            .iter()
+            .map(|node| node.serialize_node(sc, chunk_container))
+            .collect();
 
-            let path: Vec<_> = field.get_name().split('.').collect();
-            if parent.len() >= path.len() || parent != &path[..parent.len()] {
-                return result;
-            }
+        let mut field = chunk_container.non_stream.fields.form_field(ref_);
+        field.partial_name(TextStr(&self.name)).children(children);
 
-            if parent != &path[..(path.len() - 1)] {
-                let ref_ = sc.new_ref();
-                let children = self.serialize_field_tree(
-                    sc,
-                    chunk_container,
-                    Some(ref_),
-                    &path[..(parent.len() + 1)],
-                    iter,
-                );
-                let mut field = chunk_container.non_stream.fields.form_field(ref_);
-                if let Some(parent_ref) = parent_ref {
-                    field.parent(parent_ref);
-                }
-                field
-                    .children(children)
-                    .partial_name(TextStr(&path[parent.len()]));
-                result.push(ref_);
-            } else {
-                let field = iter.next().unwrap(); // peeked before, so we know it exists
-                let ref_ = field.serialize_field(sc, chunk_container);
-                result.push(ref_);
-            }
+        ref_
+    }
+}
+
+#[allow(missing_docs)]
+pub enum Node {
+    Group(FieldGroup),
+    Leaf(FieldKind),
+}
+
+impl Node {
+    fn serialize_node(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+    ) -> Ref {
+        match self {
+            Self::Group(field_group) => field_group.serialize_group(sc, chunk_container),
+            Self::Leaf(field_kind) => field_kind.serialize_field(sc, chunk_container),
         }
     }
 }
@@ -392,5 +382,14 @@ impl From<FormField<kind::Checkbox>> for FieldKind {
 impl From<FormField<kind::Radio>> for FieldKind {
     fn from(value: FormField<kind::Radio>) -> Self {
         Self::Radio(value)
+    }
+}
+
+impl<T> From<FormField<T>> for Node
+where
+    FormField<T>: Into<FieldKind>,
+{
+    fn from(value: FormField<T>) -> Self {
+        Self::Leaf(value.into())
     }
 }
