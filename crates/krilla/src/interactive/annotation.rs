@@ -307,10 +307,10 @@ impl LinkAnnotation {
 /// A widget annotation.
 #[allow(missing_docs)]
 pub struct WidgetAnnotation<T> {
-    field_name: String,
     rect: Rect,
     appearance: T,
     action: Option<Action>,
+    pub(crate) parent: Option<Ref>,
 }
 
 #[allow(missing_docs)]
@@ -322,9 +322,8 @@ impl<T> WidgetAnnotation<T> {
 
 #[allow(missing_docs)]
 impl WidgetAnnotation<SimpleAppearance> {
-    pub(crate) fn simple(field_name: String, rect: Rect, appearance: Stream) -> Self {
+    pub(crate) fn simple(rect: Rect, appearance: Stream) -> Self {
         Self {
-            field_name,
             rect,
             appearance: SimpleAppearance {
                 normal: appearance,
@@ -332,6 +331,7 @@ impl WidgetAnnotation<SimpleAppearance> {
                 down: None,
             },
             action: None,
+            parent: None,
         }
     }
 
@@ -346,7 +346,6 @@ impl WidgetAnnotation<SimpleAppearance> {
 #[allow(missing_docs)]
 impl WidgetAnnotation<DualStateAppearance> {
     pub(crate) fn dual(
-        field_name: String,
         rect: Rect,
         off_state: String,
         off_appearance: Stream,
@@ -354,7 +353,6 @@ impl WidgetAnnotation<DualStateAppearance> {
         on_appearance: Stream,
     ) -> Self {
         Self {
-            field_name,
             rect,
             appearance: DualStateAppearance {
                 off_state,
@@ -371,6 +369,7 @@ impl WidgetAnnotation<DualStateAppearance> {
                 },
             },
             action: None,
+            parent: None,
         }
     }
 
@@ -418,22 +417,10 @@ impl<T: SerializeAppearance> WidgetAnnotation<T> {
 
         T::serialize_appearance(&mut annotation, appearance_refs);
 
-        let parent_ref = sc
-            .global_objects
-            .forms
-            .get_field_ref(&self.field_name)
-            .unwrap_or_else(|| {
-                let ref_ = sc.new_ref();
-                sc.global_objects
-                    .forms
-                    .register_field_ref(self.field_name.clone(), ref_);
-                ref_
-            });
+        let parent_ref = self
+            .parent
+            .expect("a widget annotation must be registered via page.add_widget_annotation");
         annotation.parent(parent_ref);
-
-        sc.global_objects
-            .forms
-            .register_annotation(self.field_name, root_ref);
 
         Ok(annotation)
     }

@@ -1,9 +1,6 @@
 //! TODO
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    iter::Peekable,
-};
+use std::{collections::BTreeSet, iter::Peekable};
 
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
@@ -13,32 +10,15 @@ use crate::{
     geom::Rect,
     serialize::SerializeContext,
     stream::Stream,
+    tagging::AnnotationIdentifier,
 };
 
 #[derive(Default)]
 pub(crate) struct AcroForm {
-    field_refs: HashMap<String, Ref>,
-    annotations: HashMap<String, Vec<Ref>>,
     fields: BTreeSet<FieldKind>,
 }
 
 impl AcroForm {
-    pub(crate) fn register_annotation(&mut self, field_name: String, annotation_ref: Ref) {
-        self.annotations
-            .entry(field_name)
-            .or_insert_with(|| Vec::with_capacity(1))
-            .push(annotation_ref);
-    }
-
-    pub(crate) fn get_field_ref(&mut self, field_name: &str) -> Option<Ref> {
-        self.field_refs.get(field_name).copied()
-    }
-
-    pub(crate) fn register_field_ref(&mut self, field_name: String, field_ref: Ref) {
-        debug_assert!(!self.field_refs.contains_key(&field_name));
-        self.field_refs.insert(field_name, field_ref);
-    }
-
     pub(crate) fn register_field(&mut self, field: FieldKind) {
         self.fields.insert(field);
     }
@@ -113,17 +93,7 @@ impl AcroForm {
                 result.push(ref_);
             } else {
                 let field = iter.next().unwrap(); // peeked before, so we know it exists
-                let ref_ = self
-                    .field_refs
-                    .get(field.get_name())
-                    .copied()
-                    .unwrap_or_else(|| sc.new_ref());
-                field.serialize_field(
-                    sc,
-                    chunk_container,
-                    ref_,
-                    self.annotations.get(field.get_name()).map(|v| v.as_slice()),
-                );
+                let ref_ = field.serialize_field(sc, chunk_container);
                 result.push(ref_);
             }
         }
@@ -137,6 +107,8 @@ pub struct FormField<T> {
     alt_name: Option<String>,
     mapping_name: Option<String>,
     flags: FieldFlags,
+    pub(crate) identifier: Option<Ref>,
+    pub(crate) annotations: Vec<AnnotationIdentifier>,
     kind: T,
 }
 
@@ -174,7 +146,7 @@ impl FormField<kind::PushButton> {
     }
 
     pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
-        WidgetAnnotation::simple(self.name.clone(), rect, appearance)
+        WidgetAnnotation::simple(rect, appearance)
     }
 }
 
@@ -202,7 +174,6 @@ impl FormField<kind::Checkbox> {
         on_appearance: Stream,
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
-            self.name.clone(),
             rect,
             "Off".to_string(),
             off_appearance,
@@ -246,7 +217,6 @@ impl FormField<kind::Radio> {
         on_appearance: Stream,
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
-            self.name.clone(),
             rect,
             "Off".to_string(),
             off_appearance,
@@ -261,9 +231,8 @@ impl<T: SerializableField> FormField<T> {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
-        root_ref: Ref,
-        annotations: Option<&[Ref]>,
-    ) {
+    ) -> Ref {
+        let root_ref = self.identifier.unwrap_or_else(|| sc.new_ref());
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
         field
@@ -272,9 +241,15 @@ impl<T: SerializableField> FormField<T> {
 
         self.kind.serialize_field(&mut field);
 
-        if let Some(children) = annotations {
-            field.children(children.iter().copied());
+        if !self.annotations.is_empty() {
+            let annotations = self.annotations.iter().map(|identifier| {
+                let page_annotations = sc.page_infos()[identifier.page_index].annotations();
+                page_annotations[identifier.annot_index].0
+            });
+            field.children(annotations);
         }
+
+        root_ref
     }
 }
 
@@ -291,13 +266,11 @@ impl FieldKind {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
-        root_ref: Ref,
-        annotations: Option<&[Ref]>,
-    ) {
+    ) -> Ref {
         match self {
-            Self::PushButton(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-            Self::Radio(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
+            Self::PushButton(f) => f.serialize_field(sc, chunk_container),
+            Self::Checkbox(f) => f.serialize_field(sc, chunk_container),
+            Self::Radio(f) => f.serialize_field(sc, chunk_container),
         }
     }
 
