@@ -131,7 +131,7 @@ impl AcroForm {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FormField<T> {
     name: String,
     alt_name: Option<String>,
@@ -274,18 +274,6 @@ impl<T: SerializableField> FormField<T> {
 
         if let Some(children) = annotations {
             field.children(children.iter().copied());
-        }
-    }
-}
-
-impl<T: Default> Default for FormField<T> {
-    fn default() -> Self {
-        Self {
-            name: Default::default(),
-            alt_name: Default::default(),
-            mapping_name: Default::default(),
-            flags: FieldFlags::empty(),
-            kind: Default::default(),
         }
     }
 }
