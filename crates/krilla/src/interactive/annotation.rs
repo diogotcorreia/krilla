@@ -4,7 +4,7 @@
 //! a page with an "annotation". The PDF reference defines many different actions, however,
 //! krilla does not and never will expose all of them. As of right now, the only annotations
 //! that are supported are "link annotations", which allow you associate a certain region of
-//! the page with a link.
+//! the page with a link, and "widget annotations", which are part of interactive forms.
 
 use core::f32;
 
