@@ -263,35 +263,7 @@ impl FieldKind {
             Self::Radio(f) => f.serialize_field(sc, chunk_container),
         }
     }
-
-    fn get_name(&self) -> &String {
-        match self {
-            Self::PushButton(f) => &f.name,
-            Self::Checkbox(f) => &f.name,
-            Self::Radio(f) => &f.name,
-        }
-    }
 }
-
-impl Ord for FieldKind {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.get_name().cmp(other.get_name())
-    }
-}
-
-impl PartialOrd for FieldKind {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for FieldKind {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_name() == other.get_name()
-    }
-}
-
-impl Eq for FieldKind {}
 
 pub(crate) trait SerializableField {
     fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>);
