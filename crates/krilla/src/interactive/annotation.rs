@@ -458,6 +458,13 @@ pub enum WidgetAnnotationKind {
 }
 
 impl WidgetAnnotationKind {
+    pub(crate) fn set_parent(&mut self, parent_ref: Ref) {
+        match self {
+            WidgetAnnotationKind::Simple(a) => a.parent = Some(parent_ref),
+            WidgetAnnotationKind::DualState(a) => a.parent = Some(parent_ref),
+        }
+    }
+
     fn serialize_type<'a>(
         self,
         sc: &mut SerializeContext,
@@ -485,6 +492,7 @@ trait SerializableAppearance {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
     ) -> Self::RefsHolder;
+
     fn serialize_appearance(
         annotation: &mut pdf_writer::writers::Annotation<'_>,
         refs: Self::RefsHolder,

@@ -27,7 +27,7 @@ fn forms_push_button(d: &mut Document) {
     );
     button_widget.set_rollover_appearance(button_hover_appearance);
     button_widget.set_action_mouse_press(ResetFormAction::All.into());
-    page.add_widget_annotation(&mut button, button_widget);
+    page.add_widget_annotation(&mut button, button_widget.into());
 
     page.finish();
 
@@ -57,7 +57,7 @@ fn forms_checkbox(d: &mut Document) {
         on_appearance,
     );
 
-    page.add_widget_annotation(&mut checkbox, checkbox_widget);
+    page.add_widget_annotation(&mut checkbox, checkbox_widget.into());
 
     page.finish();
 
@@ -103,9 +103,9 @@ fn forms_radio_group(d: &mut Document) {
         on_appearance,
     );
 
-    page.add_widget_annotation(&mut radio_group, option_1_widget);
-    page.add_widget_annotation(&mut radio_group, option_2_widget);
-    page.add_widget_annotation(&mut radio_group, option_2_dup_widget);
+    page.add_widget_annotation(&mut radio_group, option_1_widget.into());
+    page.add_widget_annotation(&mut radio_group, option_2_widget.into());
+    page.add_widget_annotation(&mut radio_group, option_2_dup_widget.into());
 
     page.finish();
 
@@ -158,10 +158,10 @@ fn forms_reset_action(d: &mut Document) {
         ResetFormAction::Exclude(vec!["checkboxes.checkbox1".to_string()]).into(),
     );
 
-    page.add_widget_annotation(&mut checkbox_1, checkbox_1_widget);
-    page.add_widget_annotation(&mut checkbox_2, checkbox_2_widget);
-    page.add_widget_annotation(&mut reset_button_1, reset_button_1_widget);
-    page.add_widget_annotation(&mut reset_button_2, reset_button_2_widget);
+    page.add_widget_annotation(&mut checkbox_1, checkbox_1_widget.into());
+    page.add_widget_annotation(&mut checkbox_2, checkbox_2_widget.into());
+    page.add_widget_annotation(&mut reset_button_1, reset_button_1_widget.into());
+    page.add_widget_annotation(&mut reset_button_2, reset_button_2_widget.into());
 
     page.finish();
 

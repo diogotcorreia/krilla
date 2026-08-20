@@ -8,7 +8,7 @@ use pdf_writer::types::TabOrder;
 use pdf_writer::writers::NumberTree;
 use pdf_writer::{Chunk, Finish, Ref, TextStr};
 
-use crate::annotation::WidgetAnnotation;
+use crate::annotation::AnnotationType;
 use crate::chunk_container::ChunkContainer;
 use crate::configure::validate::VersionedFeature;
 use crate::configure::ValidationError;
@@ -244,14 +244,13 @@ impl<'a> Page<'a> {
     ///
     /// The given field must be the same where annotation was created from.
     /// Passing a different field is a logic error and may result in an invalid PDF.
-    pub fn add_widget_annotation<FT, AT>(
+    ///
+    /// Passing a non-widget annotation will cause a panic.
+    pub fn add_widget_annotation<FT>(
         &mut self,
         field: &mut FormField<FT>,
-        mut annotation: WidgetAnnotation<AT>,
-    ) -> Identifier
-    where
-        WidgetAnnotation<AT>: Into<Annotation>,
-    {
+        mut annotation: Annotation,
+    ) -> Identifier {
         let parent_ref = match field.identifier {
             Some(ref_) => ref_,
             None => {
@@ -261,8 +260,11 @@ impl<'a> Page<'a> {
             }
         };
 
-        annotation.parent = Some(parent_ref);
-        let mut annotation: Annotation = annotation.into();
+        let AnnotationType::Widget(widget) = &mut annotation.annotation_type else {
+            panic!("Called add_widget_annotation with a non-widget annotation");
+        };
+        widget.set_parent(parent_ref);
+
         let annot_index = self.annotations.len();
         let ai = AnnotationIdentifier::new(self.page_index, annot_index);
         let struct_parent = self.sc.register_annotation_parent(ai);
