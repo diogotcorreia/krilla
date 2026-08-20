@@ -426,3 +426,9 @@ where
         Self::Leaf(value.into())
     }
 }
+
+impl From<FieldGroup> for Node {
+    fn from(value: FieldGroup) -> Self {
+        Self::Group(value)
+    }
+}
