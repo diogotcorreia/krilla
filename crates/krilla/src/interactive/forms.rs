@@ -116,6 +116,65 @@ impl Node {
     }
 }
 
+impl<T> From<FormField<T>> for Node
+where
+    FormField<T>: Into<FieldKind>,
+{
+    fn from(value: FormField<T>) -> Self {
+        Self::Leaf(value.into())
+    }
+}
+
+impl From<FieldGroup> for Node {
+    fn from(value: FieldGroup) -> Self {
+        Self::Group(value)
+    }
+}
+
+/// A type-agnostic field.
+#[derive(Debug, Clone)]
+pub enum FieldKind {
+    /// A push button field.
+    PushButton(FormField<kind::PushButton>),
+    /// A checkbox field.
+    Checkbox(FormField<kind::Checkbox>),
+    /// A radio group field.
+    Radio(FormField<kind::Radio>),
+}
+
+impl FieldKind {
+    fn serialize_field(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
+    ) -> Ref {
+        match self {
+            Self::PushButton(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Radio(f) => f.serialize_field(sc, chunk_container, parent_ref),
+        }
+    }
+}
+
+impl From<FormField<kind::PushButton>> for FieldKind {
+    fn from(value: FormField<kind::PushButton>) -> Self {
+        Self::PushButton(value)
+    }
+}
+
+impl From<FormField<kind::Checkbox>> for FieldKind {
+    fn from(value: FormField<kind::Checkbox>) -> Self {
+        Self::Checkbox(value)
+    }
+}
+
+impl From<FormField<kind::Radio>> for FieldKind {
+    fn from(value: FormField<kind::Radio>) -> Self {
+        Self::Radio(value)
+    }
+}
+
 /// A form field.
 ///
 /// Fields can be created via [`FormField::push_button`],
@@ -326,32 +385,6 @@ impl<T: SerializableField> FormField<T> {
     }
 }
 
-/// A type-agnostic field.
-#[derive(Debug, Clone)]
-pub enum FieldKind {
-    /// A push button field.
-    PushButton(FormField<kind::PushButton>),
-    /// A checkbox field.
-    Checkbox(FormField<kind::Checkbox>),
-    /// A radio group field.
-    Radio(FormField<kind::Radio>),
-}
-
-impl FieldKind {
-    fn serialize_field(
-        &self,
-        sc: &mut SerializeContext,
-        chunk_container: &mut ChunkContainer,
-        parent_ref: Option<Ref>,
-    ) -> Ref {
-        match self {
-            Self::PushButton(f) => f.serialize_field(sc, chunk_container, parent_ref),
-            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, parent_ref),
-            Self::Radio(f) => f.serialize_field(sc, chunk_container, parent_ref),
-        }
-    }
-}
-
 pub(crate) trait SerializableField {
     fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>);
 }
@@ -427,38 +460,5 @@ pub mod kind {
                 .radio_value(Name(value))
                 .radio_default_value(Name(default_value));
         }
-    }
-}
-
-impl From<FormField<kind::PushButton>> for FieldKind {
-    fn from(value: FormField<kind::PushButton>) -> Self {
-        Self::PushButton(value)
-    }
-}
-
-impl From<FormField<kind::Checkbox>> for FieldKind {
-    fn from(value: FormField<kind::Checkbox>) -> Self {
-        Self::Checkbox(value)
-    }
-}
-
-impl From<FormField<kind::Radio>> for FieldKind {
-    fn from(value: FormField<kind::Radio>) -> Self {
-        Self::Radio(value)
-    }
-}
-
-impl<T> From<FormField<T>> for Node
-where
-    FormField<T>: Into<FieldKind>,
-{
-    fn from(value: FormField<T>) -> Self {
-        Self::Leaf(value.into())
-    }
-}
-
-impl From<FieldGroup> for Node {
-    fn from(value: FieldGroup) -> Self {
-        Self::Group(value)
     }
 }
