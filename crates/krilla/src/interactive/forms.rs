@@ -283,6 +283,14 @@ impl<T: SerializableField> FormField<T> {
             .partial_name(TextStr(self.name.rsplit('.').next().unwrap_or(&self.name)))
             .field_flags(self.flags);
 
+        if let Some(alt_name) = &self.alt_name {
+            field.alternate_name(TextStr(alt_name));
+        }
+
+        if let Some(mapping_name) = &self.mapping_name {
+            field.mapping_name(TextStr(mapping_name));
+        }
+
         self.kind.serialize_field(&mut field);
 
         if !self.annotations.is_empty() {
