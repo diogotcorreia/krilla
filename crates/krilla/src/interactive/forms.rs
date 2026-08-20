@@ -56,7 +56,7 @@ pub struct FieldTree {
 /// A field group.
 pub struct FieldGroup {
     /// The name of the field group.
-    /// The group name must not contain any dot character (`.`).
+    /// The group name must not contain any period character (`.`).
     pub name: String,
     /// The children of the field group.
     pub fields: Vec<Node>,
@@ -69,6 +69,11 @@ impl FieldGroup {
         chunk_container: &mut ChunkContainer,
         parent_ref: Option<Ref>,
     ) -> Ref {
+        debug_assert!(
+            !self.name.contains('.'),
+            "field group name cannot contain a period"
+        );
+
         let ref_ = sc.new_ref();
         let children: Vec<_> = self
             .fields
@@ -158,8 +163,9 @@ impl<T> FormField<T> {
 
 impl FormField<kind::PushButton> {
     /// Create a push button field.
-    /// The field name must not contain any dot character (`.`).
+    /// The field name must not contain any period character (`.`).
     pub fn push_button(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::PUSHBUTTON,
@@ -178,8 +184,9 @@ impl FormField<kind::PushButton> {
 
 impl FormField<kind::Checkbox> {
     /// Create a checkbox field.
-    /// The field name must not contain any dot character (`.`).
+    /// The field name must not contain any period character (`.`).
     pub fn checkbox(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             ..Default::default()
@@ -219,8 +226,9 @@ impl FormField<kind::Checkbox> {
 
 impl FormField<kind::Radio> {
     /// Create a radio group field.
-    /// The field name must not contain any dot character (`.`).
+    /// The field name must not contain any period character (`.`).
     pub fn radio(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::RADIO,
@@ -289,7 +297,7 @@ impl<T: SerializableField> FormField<T> {
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
         field
-            .partial_name(TextStr(self.name.rsplit('.').next().unwrap_or(&self.name)))
+            .partial_name(TextStr(&self.name))
             .field_flags(self.flags);
 
         if let Some(parent_ref) = parent_ref {
