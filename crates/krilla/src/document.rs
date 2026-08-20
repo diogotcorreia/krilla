@@ -112,7 +112,7 @@ impl Document {
         self.chunk_container.metadata = Some(metadata);
     }
 
-    #[allow(missing_docs)]
+    /// Set the interactive form's field tree of the document.
     pub fn set_field_tree(&mut self, root: FieldTree) {
         self.serializer_context.set_field_tree(root);
     }

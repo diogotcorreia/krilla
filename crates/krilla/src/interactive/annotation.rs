@@ -305,7 +305,7 @@ impl LinkAnnotation {
 }
 
 /// A widget annotation.
-#[allow(missing_docs)]
+/// It can be created via a [form field][crate::forms::FormField].
 pub struct WidgetAnnotation<T> {
     rect: Rect,
     appearance: T,
@@ -313,14 +313,16 @@ pub struct WidgetAnnotation<T> {
     pub(crate) parent: Option<Ref>,
 }
 
-#[allow(missing_docs)]
+/// Applies to all widget annotations regardless of appearance.
 impl<T> WidgetAnnotation<T> {
-    pub fn set_action(&mut self, action: Action) {
+    /// Set the action to trigger when the mouse button is pressed
+    /// inside the annotation's area.
+    pub fn set_action_mouse_press(&mut self, action: Action) {
         self.action = Some(action);
     }
 }
 
-#[allow(missing_docs)]
+/// Applies to widget annotations with a single state appearance.
 impl WidgetAnnotation<SimpleAppearance> {
     pub(crate) fn simple(rect: Rect, appearance: Stream) -> Self {
         Self {
@@ -335,15 +337,20 @@ impl WidgetAnnotation<SimpleAppearance> {
         }
     }
 
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area.
     pub fn set_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area.
     pub fn set_down_appearance(&mut self, appearance: Stream) {
         self.appearance.down = Some(appearance);
     }
 }
 
-#[allow(missing_docs)]
+/// Applies to widget annotations with a dual state appearance (e.g., on/off).
 impl WidgetAnnotation<DualStateAppearance> {
     pub(crate) fn dual(
         rect: Rect,
@@ -373,21 +380,37 @@ impl WidgetAnnotation<DualStateAppearance> {
         }
     }
 
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area and the annotation is
+    /// in the 'off' state.
     pub fn set_off_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.off_appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area and the annotation is
+    /// in the 'on' state.
     pub fn set_on_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.on_appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area
+    /// and the annotation is in the 'off' state.
     pub fn set_off_down_appearance(&mut self, appearance: Stream) {
         self.appearance.off_appearance.down = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area
+    /// and the annotation is in the 'on' state.
     pub fn set_on_down_appearance(&mut self, appearance: Stream) {
         self.appearance.on_appearance.down = Some(appearance);
     }
 }
 
-impl<T: SerializeAppearance> WidgetAnnotation<T> {
+#[allow(private_bounds)]
+impl<T: SerializableAppearance> WidgetAnnotation<T> {
     fn serialize_type<'a>(
         self,
         sc: &mut SerializeContext,
@@ -426,10 +449,12 @@ impl<T: SerializeAppearance> WidgetAnnotation<T> {
     }
 }
 
-#[allow(missing_docs)]
+/// A type-agnostic widget annotation.
 pub enum WidgetAnnotationKind {
-    Simple(WidgetAnnotation<SimpleAppearance>),
-    DualState(WidgetAnnotation<DualStateAppearance>),
+    /// A widget annotation whose appearance has a single state.
+    Simple(Box<WidgetAnnotation<SimpleAppearance>>),
+    /// A widget annotation whose appearance has two states (e.g., on/off).
+    DualState(Box<WidgetAnnotation<DualStateAppearance>>),
 }
 
 impl WidgetAnnotationKind {
@@ -451,7 +476,7 @@ impl WidgetAnnotationKind {
     }
 }
 
-pub(crate) trait SerializeAppearance {
+trait SerializableAppearance {
     // TODO: refactor, this is the only way I could find to make the borrow checker happy
     type RefsHolder;
 
@@ -475,14 +500,14 @@ pub(crate) trait SerializeAppearance {
     }
 }
 
-#[allow(missing_docs)]
+/// The appearance of an annotation that has a single state.
 pub struct SimpleAppearance {
     normal: Stream,
     rollover: Option<Stream>,
     down: Option<Stream>,
 }
 
-#[allow(missing_docs)]
+/// The appearance of an annotation that has two states (e.g., on/off).
 pub struct DualStateAppearance {
     off_state: String,
     off_appearance: SimpleAppearance,
@@ -492,13 +517,13 @@ pub struct DualStateAppearance {
 
 impl From<WidgetAnnotation<SimpleAppearance>> for WidgetAnnotationKind {
     fn from(value: WidgetAnnotation<SimpleAppearance>) -> Self {
-        Self::Simple(value)
+        Self::Simple(Box::new(value))
     }
 }
 
 impl From<WidgetAnnotation<DualStateAppearance>> for WidgetAnnotationKind {
     fn from(value: WidgetAnnotation<DualStateAppearance>) -> Self {
-        Self::DualState(value)
+        Self::DualState(Box::new(value))
     }
 }
 
@@ -511,7 +536,7 @@ where
     }
 }
 
-impl SerializeAppearance for SimpleAppearance {
+impl SerializableAppearance for SimpleAppearance {
     type RefsHolder = (Ref, Option<Ref>, Option<Ref>);
 
     fn register_refs(
@@ -545,7 +570,7 @@ impl SerializeAppearance for SimpleAppearance {
     }
 }
 
-impl SerializeAppearance for DualStateAppearance {
+impl SerializableAppearance for DualStateAppearance {
     type RefsHolder = (
         (String, Ref, Option<Ref>, Option<Ref>), // off
         (String, Ref, Option<Ref>, Option<Ref>), // on

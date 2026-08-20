@@ -158,7 +158,9 @@ impl FormField<kind::PushButton> {
     }
 
     /// Create a widget annotation for the push button field.
-    /// Takes its position on the page, as well as its appearance.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `appearance`: The appearance of the widget annotation.
     pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
         WidgetAnnotation::simple(rect, appearance)
     }
@@ -185,8 +187,10 @@ impl FormField<kind::Checkbox> {
     }
 
     /// Create a widget annotation for the checkbox field.
-    /// Takes its position on the page, as well as its appearance
-    /// for both the off and on states.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `off_appearance`: The appearance of the widget annotation when the checkbox is unchecked.
+    /// - `on_appearance`: The appearance of the widget annotation when the checkbox is checked.
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -203,7 +207,6 @@ impl FormField<kind::Checkbox> {
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::Radio> {
     /// Create a radio group field.
     /// The field name must not contain any dot character (`.`).
@@ -242,8 +245,11 @@ impl FormField<kind::Radio> {
     }
 
     /// Create a widget annotation for the radio group field.
-    /// Takes its position on the page, the value it represents,
-    /// as well as its appearance for both the off and on states.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `value`: The value this widget annotation represents in the radio group.
+    /// - `off_appearance`: The appearance of the widget annotation when the radio button is off.
+    /// - `on_appearance`: The appearance of the widget annotation when the radio button is on.
     pub fn new_widget(
         &self,
         rect: Rect,
