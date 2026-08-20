@@ -6,8 +6,8 @@
 //! the only available action is the link action, which allows you to specify a link that
 //! should be opened, when activating the action.
 
-use pdf_writer::types::ActionType;
-use pdf_writer::{Name, Str};
+use pdf_writer::types::{ActionType, FormActionFlags};
+use pdf_writer::{Finish, Name, Str, TextStr};
 
 use crate::error::KrillaResult;
 use crate::interactive::destination::Destination;
@@ -19,6 +19,8 @@ pub enum Action {
     Link(LinkAction),
     /// A go-to action.
     Goto(Destination),
+    /// A reset form action.
+    ResetForm(ResetFormAction),
 }
 
 impl Action {
@@ -36,6 +38,11 @@ impl Action {
             Action::Goto(dest) => {
                 let dest_entry = action.action_type(ActionType::GoTo).insert(Name(b"D"));
                 dest.serialize(sc, dest_entry)
+            }
+            Action::ResetForm(reset_form) => {
+                reset_form.serialize(action);
+
+                Ok(())
             }
         }
     }
@@ -64,5 +71,43 @@ impl LinkAction {
         action
             .action_type(ActionType::Uri)
             .uri(Str(self.uri.as_bytes()));
+    }
+}
+
+/// A reset form action. Will reset the given form fields when triggered.
+pub enum ResetFormAction {
+    /// Reset all fields in the document. Convenience variant for an empty [`ResetFormAction::Exclude`] variant.
+    All,
+    /// Reset only the fields with the given fully qualified names.
+    Include(Vec<String>),
+    /// Reset all fields in the document except the ones with the given fully qualified names.
+    Exclude(Vec<String>),
+}
+
+impl From<ResetFormAction> for Action {
+    fn from(value: ResetFormAction) -> Self {
+        Action::ResetForm(value)
+    }
+}
+
+impl ResetFormAction {
+    fn serialize(&self, mut action: pdf_writer::writers::Action) {
+        action.action_type(ActionType::ResetForm);
+        match self {
+            ResetFormAction::All => {}
+            ResetFormAction::Include(items) => {
+                action
+                    .fields()
+                    .items(items.iter().map(|name| TextStr(name)))
+                    .finish();
+            }
+            ResetFormAction::Exclude(items) => {
+                action
+                    .fields()
+                    .items(items.iter().map(|name| TextStr(name)))
+                    .finish();
+                action.form_flags(FormActionFlags::INCLUDE_EXCLUDE);
+            }
+        }
     }
 }
