@@ -35,7 +35,7 @@ impl AcroForm {
             let fields = field_tree
                 .fields
                 .iter()
-                .map(|node| node.serialize_node(sc, chunk_container));
+                .map(|node| node.serialize_node(sc, chunk_container, None));
 
             form.fields(fields);
         }
@@ -67,16 +67,21 @@ impl FieldGroup {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
     ) -> Ref {
         let ref_ = sc.new_ref();
         let children: Vec<_> = self
             .fields
             .iter()
-            .map(|node| node.serialize_node(sc, chunk_container))
+            .map(|node| node.serialize_node(sc, chunk_container, Some(ref_)))
             .collect();
 
         let mut field = chunk_container.non_stream.fields.form_field(ref_);
         field.partial_name(TextStr(&self.name)).children(children);
+
+        if let Some(parent_ref) = parent_ref {
+            field.parent(parent_ref);
+        }
 
         ref_
     }
@@ -95,10 +100,13 @@ impl Node {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
     ) -> Ref {
         match self {
-            Self::Group(field_group) => field_group.serialize_group(sc, chunk_container),
-            Self::Leaf(field_kind) => field_kind.serialize_field(sc, chunk_container),
+            Self::Group(field_group) => {
+                field_group.serialize_group(sc, chunk_container, parent_ref)
+            }
+            Self::Leaf(field_kind) => field_kind.serialize_field(sc, chunk_container, parent_ref),
         }
     }
 }
@@ -275,6 +283,7 @@ impl<T: SerializableField> FormField<T> {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
     ) -> Ref {
         let root_ref = self.identifier.unwrap_or_else(|| sc.new_ref());
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
@@ -282,6 +291,10 @@ impl<T: SerializableField> FormField<T> {
         field
             .partial_name(TextStr(self.name.rsplit('.').next().unwrap_or(&self.name)))
             .field_flags(self.flags);
+
+        if let Some(parent_ref) = parent_ref {
+            field.parent(parent_ref);
+        }
 
         if let Some(alt_name) = &self.alt_name {
             field.alternate_name(TextStr(alt_name));
@@ -321,11 +334,12 @@ impl FieldKind {
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
     ) -> Ref {
         match self {
-            Self::PushButton(f) => f.serialize_field(sc, chunk_container),
-            Self::Checkbox(f) => f.serialize_field(sc, chunk_container),
-            Self::Radio(f) => f.serialize_field(sc, chunk_container),
+            Self::PushButton(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Radio(f) => f.serialize_field(sc, chunk_container, parent_ref),
         }
     }
 }
