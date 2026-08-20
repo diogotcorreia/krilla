@@ -18,7 +18,7 @@ use crate::{
 
 #[derive(Default)]
 pub(crate) struct AcroForm {
-    pub(crate) field_tree: FieldTree,
+    pub(crate) field_tree: Option<FieldTree>,
 }
 
 impl AcroForm {
@@ -31,13 +31,15 @@ impl AcroForm {
         let mut chunk = sc.new_chunk();
         let mut form = chunk.indirect(root_ref).start::<Form>();
 
-        let fields = self
-            .field_tree
-            .fields
-            .iter()
-            .map(|node| node.serialize_node(sc, chunk_container));
+        if let Some(field_tree) = &self.field_tree {
+            let fields = field_tree
+                .fields
+                .iter()
+                .map(|node| node.serialize_node(sc, chunk_container));
 
-        form.fields(fields);
+            form.fields(fields);
+        }
+
         form.finish();
 
         chunk_container.non_stream.forms = Some((root_ref, chunk));

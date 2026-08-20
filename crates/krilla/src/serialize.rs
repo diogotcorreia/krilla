@@ -371,7 +371,7 @@ impl SerializeContext {
     }
 
     pub(crate) fn set_field_tree(&mut self, root: FieldTree) {
-        self.global_objects.forms.field_tree = root;
+        self.global_objects.forms.field_tree = Some(root);
     }
 
     pub(crate) fn set_tag_tree(&mut self, root: TagTree) {
@@ -816,9 +816,11 @@ impl SerializeContext {
     }
 
     fn serialize_forms(&mut self, chunk_container: &mut ChunkContainer) {
-        let acroform = self.global_objects.forms.take();
-        let acroform_ref = self.new_ref();
-        acroform.serialize(self, chunk_container, acroform_ref);
+        if self.global_objects.forms.field_tree.is_some() {
+            let acroform = self.global_objects.forms.take();
+            let acroform_ref = self.new_ref();
+            acroform.serialize(self, chunk_container, acroform_ref);
+        }
     }
 
     fn serialize_xyz_destinations(
