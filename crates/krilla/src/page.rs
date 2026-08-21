@@ -14,7 +14,7 @@ use crate::configure::validate::VersionedFeature;
 use crate::configure::ValidationError;
 use crate::content::ContentBuilder;
 use crate::error::KrillaResult;
-use crate::forms::FormField;
+use crate::form::FormField;
 use crate::geom::{Rect, Size, Transform};
 use crate::interactive::annotation::Annotation;
 use crate::interchange::tagging::{Identifier, PageTagIdentifier};

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use krilla::action::ResetFormAction;
 use krilla::color::rgb;
-use krilla::forms::{FieldGroup, FieldTree, FormField};
+use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::{PathBuilder, Point, Rect, Transform};
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};

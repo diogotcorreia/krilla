@@ -1,6 +1,6 @@
 use krilla::action::ResetFormAction;
-use krilla::forms::kind::PushButton;
-use krilla::forms::{FieldGroup, FieldTree, FormField};
+use krilla::form::kind::PushButton;
+use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::Rect;
 use krilla::page::PageSettings;
 use krilla::paint::Fill;

@@ -15,7 +15,7 @@ use crate::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
 use crate::configure::validate::ValidationStore;
 use crate::configure::{Configuration, PdfVersion, ValidationError, Validators};
 use crate::error::{KrillaError, KrillaResult, LimitError};
-use crate::forms::{AcroForm, FieldTree};
+use crate::form::{AcroForm, FieldTree};
 use crate::geom::Size;
 use crate::graphics::color::{rgb, ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB};
 use crate::graphics::icc::{ICCBasedColorSpace, ICCProfile};
