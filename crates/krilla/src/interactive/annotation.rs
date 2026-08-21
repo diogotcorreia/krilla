@@ -4,7 +4,7 @@
 //! a page with an "annotation". The PDF reference defines many different actions, however,
 //! krilla does not and never will expose all of them. As of right now, the only annotations
 //! that are supported are "link annotations", which allow you associate a certain region of
-//! the page with a link.
+//! the page with a link, and "widget annotations", which are part of interactive forms.
 
 use core::f32;
 
@@ -305,26 +305,27 @@ impl LinkAnnotation {
 }
 
 /// A widget annotation.
-#[allow(missing_docs)]
+/// It can be created via a [form field][crate::forms::FormField].
 pub struct WidgetAnnotation<T> {
-    field_name: String,
     rect: Rect,
     appearance: T,
     action: Option<Action>,
+    pub(crate) parent: Option<Ref>,
 }
 
-#[allow(missing_docs)]
+/// Applies to all widget annotations regardless of appearance.
 impl<T> WidgetAnnotation<T> {
-    pub fn set_action(&mut self, action: Action) {
+    /// Set the action to trigger when the mouse button is pressed
+    /// inside the annotation's area.
+    pub fn set_action_mouse_press(&mut self, action: Action) {
         self.action = Some(action);
     }
 }
 
-#[allow(missing_docs)]
+/// Applies to widget annotations with a single state appearance.
 impl WidgetAnnotation<SimpleAppearance> {
-    pub(crate) fn simple(field_name: String, rect: Rect, appearance: Stream) -> Self {
+    pub(crate) fn simple(rect: Rect, appearance: Stream) -> Self {
         Self {
-            field_name,
             rect,
             appearance: SimpleAppearance {
                 normal: appearance,
@@ -332,21 +333,26 @@ impl WidgetAnnotation<SimpleAppearance> {
                 down: None,
             },
             action: None,
+            parent: None,
         }
     }
 
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area.
     pub fn set_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area.
     pub fn set_down_appearance(&mut self, appearance: Stream) {
         self.appearance.down = Some(appearance);
     }
 }
 
-#[allow(missing_docs)]
+/// Applies to widget annotations with a dual state appearance (e.g., on/off).
 impl WidgetAnnotation<DualStateAppearance> {
     pub(crate) fn dual(
-        field_name: String,
         rect: Rect,
         off_state: String,
         off_appearance: Stream,
@@ -354,7 +360,6 @@ impl WidgetAnnotation<DualStateAppearance> {
         on_appearance: Stream,
     ) -> Self {
         Self {
-            field_name,
             rect,
             appearance: DualStateAppearance {
                 off_state,
@@ -371,24 +376,41 @@ impl WidgetAnnotation<DualStateAppearance> {
                 },
             },
             action: None,
+            parent: None,
         }
     }
 
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area and the annotation is
+    /// in the 'off' state.
     pub fn set_off_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.off_appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is hovering over the annotation's area and the annotation is
+    /// in the 'on' state.
     pub fn set_on_rollover_appearance(&mut self, appearance: Stream) {
         self.appearance.on_appearance.rollover = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area
+    /// and the annotation is in the 'off' state.
     pub fn set_off_down_appearance(&mut self, appearance: Stream) {
         self.appearance.off_appearance.down = Some(appearance);
     }
+
+    /// Set the appearance of the annotation when the mouse
+    /// is pressed or is being held down over the annotation's area
+    /// and the annotation is in the 'on' state.
     pub fn set_on_down_appearance(&mut self, appearance: Stream) {
         self.appearance.on_appearance.down = Some(appearance);
     }
 }
 
-impl<T: SerializeAppearance> WidgetAnnotation<T> {
+#[allow(private_bounds)]
+impl<T: SerializableAppearance> WidgetAnnotation<T> {
     fn serialize_type<'a>(
         self,
         sc: &mut SerializeContext,
@@ -418,34 +440,31 @@ impl<T: SerializeAppearance> WidgetAnnotation<T> {
 
         T::serialize_appearance(&mut annotation, appearance_refs);
 
-        let parent_ref = sc
-            .global_objects
-            .forms
-            .get_field_ref(&self.field_name)
-            .unwrap_or_else(|| {
-                let ref_ = sc.new_ref();
-                sc.global_objects
-                    .forms
-                    .register_field_ref(self.field_name.clone(), ref_);
-                ref_
-            });
+        let parent_ref = self
+            .parent
+            .expect("a widget annotation must be registered via page.add_widget_annotation");
         annotation.parent(parent_ref);
-
-        sc.global_objects
-            .forms
-            .register_annotation(self.field_name, root_ref);
 
         Ok(annotation)
     }
 }
 
-#[allow(missing_docs)]
+/// A type-agnostic widget annotation.
 pub enum WidgetAnnotationKind {
-    Simple(WidgetAnnotation<SimpleAppearance>),
-    DualState(WidgetAnnotation<DualStateAppearance>),
+    /// A widget annotation whose appearance has a single state.
+    Simple(Box<WidgetAnnotation<SimpleAppearance>>),
+    /// A widget annotation whose appearance has two states (e.g., on/off).
+    DualState(Box<WidgetAnnotation<DualStateAppearance>>),
 }
 
 impl WidgetAnnotationKind {
+    pub(crate) fn set_parent(&mut self, parent_ref: Ref) {
+        match self {
+            WidgetAnnotationKind::Simple(a) => a.parent = Some(parent_ref),
+            WidgetAnnotationKind::DualState(a) => a.parent = Some(parent_ref),
+        }
+    }
+
     fn serialize_type<'a>(
         self,
         sc: &mut SerializeContext,
@@ -464,7 +483,7 @@ impl WidgetAnnotationKind {
     }
 }
 
-pub(crate) trait SerializeAppearance {
+trait SerializableAppearance {
     // TODO: refactor, this is the only way I could find to make the borrow checker happy
     type RefsHolder;
 
@@ -473,6 +492,7 @@ pub(crate) trait SerializeAppearance {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
     ) -> Self::RefsHolder;
+
     fn serialize_appearance(
         annotation: &mut pdf_writer::writers::Annotation<'_>,
         refs: Self::RefsHolder,
@@ -488,14 +508,14 @@ pub(crate) trait SerializeAppearance {
     }
 }
 
-#[allow(missing_docs)]
+/// The appearance of an annotation that has a single state.
 pub struct SimpleAppearance {
     normal: Stream,
     rollover: Option<Stream>,
     down: Option<Stream>,
 }
 
-#[allow(missing_docs)]
+/// The appearance of an annotation that has two states (e.g., on/off).
 pub struct DualStateAppearance {
     off_state: String,
     off_appearance: SimpleAppearance,
@@ -505,13 +525,13 @@ pub struct DualStateAppearance {
 
 impl From<WidgetAnnotation<SimpleAppearance>> for WidgetAnnotationKind {
     fn from(value: WidgetAnnotation<SimpleAppearance>) -> Self {
-        Self::Simple(value)
+        Self::Simple(Box::new(value))
     }
 }
 
 impl From<WidgetAnnotation<DualStateAppearance>> for WidgetAnnotationKind {
     fn from(value: WidgetAnnotation<DualStateAppearance>) -> Self {
-        Self::DualState(value)
+        Self::DualState(Box::new(value))
     }
 }
 
@@ -524,7 +544,7 @@ where
     }
 }
 
-impl SerializeAppearance for SimpleAppearance {
+impl SerializableAppearance for SimpleAppearance {
     type RefsHolder = (Ref, Option<Ref>, Option<Ref>);
 
     fn register_refs(
@@ -558,7 +578,7 @@ impl SerializeAppearance for SimpleAppearance {
     }
 }
 
-impl SerializeAppearance for DualStateAppearance {
+impl SerializableAppearance for DualStateAppearance {
     type RefsHolder = (
         (String, Ref, Option<Ref>, Option<Ref>), // off
         (String, Ref, Option<Ref>, Option<Ref>), // on

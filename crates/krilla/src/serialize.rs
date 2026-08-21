@@ -15,7 +15,7 @@ use crate::color::{CieBasedColorSpace, DeviceColorSpace, SpecialColorSpace};
 use crate::configure::validate::ValidationStore;
 use crate::configure::{Configuration, PdfVersion, ValidationError, Validators};
 use crate::error::{KrillaError, KrillaResult, LimitError};
-use crate::forms::{AcroForm, FieldKind};
+use crate::forms::{AcroForm, FieldTree};
 use crate::geom::Size;
 use crate::graphics::color::{rgb, ColorSpace, DEVICE_CMYK, DEVICE_GRAY, DEVICE_RGB};
 use crate::graphics::icc::{ICCBasedColorSpace, ICCProfile};
@@ -370,8 +370,8 @@ impl SerializeContext {
         }
     }
 
-    pub(crate) fn add_field(&mut self, field: FieldKind) {
-        self.global_objects.forms.register_field(field);
+    pub(crate) fn set_field_tree(&mut self, root: FieldTree) {
+        self.global_objects.forms.field_tree = Some(root);
     }
 
     pub(crate) fn set_tag_tree(&mut self, root: TagTree) {
@@ -816,9 +816,11 @@ impl SerializeContext {
     }
 
     fn serialize_forms(&mut self, chunk_container: &mut ChunkContainer) {
-        let acroform = self.global_objects.forms.take();
-        let acroform_ref = self.new_ref();
-        acroform.serialize(self, chunk_container, acroform_ref);
+        if self.global_objects.forms.field_tree.is_some() {
+            let acroform = self.global_objects.forms.take();
+            let acroform_ref = self.new_ref();
+            acroform.serialize(self, chunk_container, acroform_ref);
+        }
     }
 
     fn serialize_xyz_destinations(

@@ -47,6 +47,7 @@ mod annotation;
 mod destination;
 mod embed;
 mod font;
+mod forms;
 mod graphic;
 mod image;
 mod mask;

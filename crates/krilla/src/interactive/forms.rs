@@ -1,49 +1,29 @@
-//! TODO
-
-use std::{
-    collections::{BTreeSet, HashMap},
-    iter::Peekable,
-};
+//! PDF forms, allowing you to add interactive widgets to the document,
+//! such as text fields, checkboxes, radio buttons, and more.
+//!
+//! There is only a single form in the entire document, but it can have
+//! multiple fields. These fields are organized in a tree structure.
+//! Each field can be displayed on the page via one or more annotations.
 
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
     annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
     chunk_container::ChunkContainer,
+    configure::PdfVersion,
     geom::Rect,
     resource::ResourceDictionaryBuilder,
     serialize::SerializeContext,
     stream::Stream,
+    tagging::AnnotationIdentifier,
 };
 
 pub(crate) struct AcroForm {
-    field_refs: HashMap<String, Ref>,
-    annotations: HashMap<String, Vec<Ref>>,
-    fields: BTreeSet<FieldKind>,
+    pub(crate) field_tree: Option<FieldTree>,
     rd_builder: ResourceDictionaryBuilder,
 }
 
 impl AcroForm {
-    pub(crate) fn register_annotation(&mut self, field_name: String, annotation_ref: Ref) {
-        self.annotations
-            .entry(field_name)
-            .or_insert_with(|| Vec::with_capacity(1))
-            .push(annotation_ref);
-    }
-
-    pub(crate) fn get_field_ref(&mut self, field_name: &str) -> Option<Ref> {
-        self.field_refs.get(field_name).copied()
-    }
-
-    pub(crate) fn register_field_ref(&mut self, field_name: String, field_ref: Ref) {
-        debug_assert!(!self.field_refs.contains_key(&field_name));
-        self.field_refs.insert(field_name, field_ref);
-    }
-
-    pub(crate) fn register_field(&mut self, field: FieldKind) {
-        self.fields.insert(field);
-    }
-
     pub(crate) fn serialize(
         &self,
         sc: &mut SerializeContext,
@@ -53,131 +33,218 @@ impl AcroForm {
         let mut chunk = sc.new_chunk();
         let mut form = chunk.indirect(root_ref).start::<Form>();
 
-        let fields = self.serialize_field_tree(
-            sc,
-            chunk_container,
-            None,
-            &[],
-            &mut self.fields.iter().peekable(),
-        );
+        if let Some(field_tree) = &self.field_tree {
+            let fields = field_tree
+                .fields
+                .iter()
+                .map(|node| node.serialize_node(sc, chunk_container, None));
 
-        form.fields(fields);
+            form.fields(fields);
+        }
+
         form.finish();
 
         chunk_container.non_stream.forms = Some((root_ref, chunk));
-    }
-
-    /// Turn a flat set of fields into a tree structure, as required by
-    /// the PDF specification. If a field name contains the dot (`.`)
-    /// separator, the intermediate fields are created automatically.
-    /// This function returns the references to the children of a given
-    /// level of the tree (if `parent` is empty, the returned refs are the
-    /// top-level fields, to be added to the AcroForm).
-    /// It is a logic error for a provided field to also be an intermediate
-    /// field (e.g., if foo.bar exists, foo cannot exist as well), and it might
-    /// result in an invalid PDF.
-    fn serialize_field_tree<'a>(
-        &self,
-        sc: &mut SerializeContext,
-        chunk_container: &mut ChunkContainer,
-        parent_ref: Option<Ref>,
-        parent: &[&'a str],
-        iter: &mut Peekable<impl Iterator<Item = &'a FieldKind>>,
-    ) -> Vec<Ref> {
-        let mut result = Vec::new();
-        loop {
-            let Some(field) = iter.peek() else {
-                return result;
-            };
-
-            let path: Vec<_> = field.get_name().split('.').collect();
-            if parent.len() >= path.len() || parent != &path[..parent.len()] {
-                return result;
-            }
-
-            if parent != &path[..(path.len() - 1)] {
-                let ref_ = sc.new_ref();
-                let children = self.serialize_field_tree(
-                    sc,
-                    chunk_container,
-                    Some(ref_),
-                    &path[..(parent.len() + 1)],
-                    iter,
-                );
-                let mut field = chunk_container.non_stream.fields.form_field(ref_);
-                if let Some(parent_ref) = parent_ref {
-                    field.parent(parent_ref);
-                }
-                field
-                    .children(children)
-                    .partial_name(TextStr(&path[parent.len()]));
-                result.push(ref_);
-            } else {
-                let field = iter.next().unwrap(); // peeked before, so we know it exists
-                let ref_ = self
-                    .field_refs
-                    .get(field.get_name())
-                    .copied()
-                    .unwrap_or_else(|| sc.new_ref());
-                field.serialize_field(
-                    sc,
-                    chunk_container,
-                    ref_,
-                    self.annotations.get(field.get_name()).map(|v| v.as_slice()),
-                );
-                result.push(ref_);
-            }
-        }
     }
 }
 
 impl Default for AcroForm {
     fn default() -> Self {
         Self {
-            field_refs: Default::default(),
-            annotations: Default::default(),
-            fields: Default::default(),
+            field_tree: Default::default(),
             rd_builder: ResourceDictionaryBuilder::new(),
         }
     }
 }
 
-#[allow(missing_docs)]
+/// A field tree.
+#[derive(Default)]
+pub struct FieldTree {
+    /// The children of the field tree.
+    pub fields: Vec<Node>,
+}
+
+/// A field group.
+pub struct FieldGroup {
+    /// The name of the field group.
+    /// The group name must not contain any period character (`.`).
+    pub name: String,
+    /// The children of the field group.
+    pub fields: Vec<Node>,
+}
+
+impl FieldGroup {
+    fn serialize_group(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
+    ) -> Ref {
+        debug_assert!(
+            !self.name.contains('.'),
+            "field group name cannot contain a period"
+        );
+
+        let ref_ = sc.new_ref();
+        let children: Vec<_> = self
+            .fields
+            .iter()
+            .map(|node| node.serialize_node(sc, chunk_container, Some(ref_)))
+            .collect();
+
+        let mut field = chunk_container.non_stream.fields.form_field(ref_);
+        field.partial_name(TextStr(&self.name)).children(children);
+
+        if let Some(parent_ref) = parent_ref {
+            field.parent(parent_ref);
+        }
+
+        ref_
+    }
+}
+
+/// A node in a field tree.
+pub enum Node {
+    /// A group node.
+    Group(FieldGroup),
+    /// A leaf node.
+    Leaf(FieldKind),
+}
+
+impl Node {
+    fn serialize_node(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
+    ) -> Ref {
+        match self {
+            Self::Group(field_group) => {
+                field_group.serialize_group(sc, chunk_container, parent_ref)
+            }
+            Self::Leaf(field_kind) => field_kind.serialize_field(sc, chunk_container, parent_ref),
+        }
+    }
+}
+
+impl<T> From<FormField<T>> for Node
+where
+    FormField<T>: Into<FieldKind>,
+{
+    fn from(value: FormField<T>) -> Self {
+        Self::Leaf(value.into())
+    }
+}
+
+impl From<FieldGroup> for Node {
+    fn from(value: FieldGroup) -> Self {
+        Self::Group(value)
+    }
+}
+
+/// A type-agnostic field.
+#[derive(Debug, Clone)]
+pub enum FieldKind {
+    /// A push button field.
+    PushButton(FormField<kind::PushButton>),
+    /// A checkbox field.
+    Checkbox(FormField<kind::Checkbox>),
+    /// A radio group field.
+    Radio(FormField<kind::Radio>),
+    /// A text field.
+    Text(FormField<kind::Text>),
+}
+
+impl FieldKind {
+    fn serialize_field(
+        &self,
+        sc: &mut SerializeContext,
+        chunk_container: &mut ChunkContainer,
+        parent_ref: Option<Ref>,
+    ) -> Ref {
+        match self {
+            Self::PushButton(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Radio(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::Text(f) => f.serialize_field(sc, chunk_container, parent_ref),
+        }
+    }
+}
+
+impl From<FormField<kind::PushButton>> for FieldKind {
+    fn from(value: FormField<kind::PushButton>) -> Self {
+        Self::PushButton(value)
+    }
+}
+
+impl From<FormField<kind::Checkbox>> for FieldKind {
+    fn from(value: FormField<kind::Checkbox>) -> Self {
+        Self::Checkbox(value)
+    }
+}
+
+impl From<FormField<kind::Radio>> for FieldKind {
+    fn from(value: FormField<kind::Radio>) -> Self {
+        Self::Radio(value)
+    }
+}
+
+impl From<FormField<kind::Text>> for FieldKind {
+    fn from(value: FormField<kind::Text>) -> Self {
+        Self::Text(value)
+    }
+}
+
+/// A form field.
+///
+/// Fields can be created via [`FormField::push_button`],
+/// [`FormField::checkbox`], and [`FormField::radio`].
 #[derive(Debug, Clone, Default)]
 pub struct FormField<T> {
     name: String,
     alt_name: Option<String>,
     mapping_name: Option<String>,
     flags: FieldFlags,
+    pub(crate) identifier: Option<Ref>,
+    pub(crate) annotations: Vec<AnnotationIdentifier>,
     kind: T,
 }
 
-#[allow(missing_docs)]
 impl<T> FormField<T> {
+    /// Set the alternative name of the field.
+    /// This is used to refer to this field in the user interface,
+    /// as well as for accessibility purposes.
     pub fn set_alt_name(&mut self, alt_name: String) {
         self.alt_name = Some(alt_name);
     }
 
+    /// Set the mapping name of the field.
+    /// This is used during submission/export.
     pub fn set_mapping_name(&mut self, mapping_name: String) {
         self.mapping_name = Some(mapping_name);
     }
 
+    /// Set whether the field is read-only. Default: `false`.
     pub fn set_read_only(&mut self, read_only: bool) {
         self.flags.set(FieldFlags::READ_ONLY, read_only);
     }
 
+    /// Set whether the field is required. Default: `false`.
     pub fn set_required(&mut self, required: bool) {
         self.flags.set(FieldFlags::REQUIRED, required);
     }
 
+    /// Set whether the field will be exported during submission. Default: `true`.
     pub fn set_export(&mut self, export: bool) {
         self.flags.set(FieldFlags::NO_EXPORT, !export);
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::PushButton> {
+    /// Create a push button field.
+    /// The field name must not contain any period character (`.`).
     pub fn push_button(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::PUSHBUTTON,
@@ -185,28 +252,41 @@ impl FormField<kind::PushButton> {
         }
     }
 
+    /// Create a widget annotation for the push button field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `appearance`: The appearance of the widget annotation.
     pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
-        WidgetAnnotation::simple(self.name.clone(), rect, appearance)
+        WidgetAnnotation::simple(rect, appearance)
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::Checkbox> {
+    /// Create a checkbox field.
+    /// The field name must not contain any period character (`.`).
     pub fn checkbox(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             ..Default::default()
         }
     }
 
+    /// Set whether this checkbox is checked.
     pub fn set_checked(&mut self, checked: bool) {
         self.kind.checked = Some(checked);
     }
 
+    /// Set whether this checkbox is checked by default.
     pub fn set_default_checked(&mut self, checked: bool) {
         self.kind.default_checked = Some(checked);
     }
 
+    /// Create a widget annotation for the checkbox field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `off_appearance`: The appearance of the widget annotation when the checkbox is unchecked.
+    /// - `on_appearance`: The appearance of the widget annotation when the checkbox is checked.
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -214,7 +294,6 @@ impl FormField<kind::Checkbox> {
         on_appearance: Stream,
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
-            self.name.clone(),
             rect,
             "Off".to_string(),
             off_appearance,
@@ -224,9 +303,11 @@ impl FormField<kind::Checkbox> {
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::Radio> {
+    /// Create a radio group field.
+    /// The field name must not contain any period character (`.`).
     pub fn radio(name: String) -> Self {
+        debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::RADIO,
@@ -234,22 +315,38 @@ impl FormField<kind::Radio> {
         }
     }
 
+    /// Set the value of the radio group.
+    /// It should correspond to a value of one of the annotations.
+    // TODO: take Option<String> instead?
     pub fn set_value(&mut self, value: String) {
         self.kind.value = Some(value);
     }
 
+    /// Set the default value of the radio group.
+    /// It should correspond to a value of one of the annotations.
+    // TODO: take Option<String> instead?
     pub fn set_default_value(&mut self, value: String) {
         self.kind.default_value = Some(value);
     }
 
+    /// Set whether to allow unselecting all buttons of this radio group.
+    /// Default: true
     pub fn set_allow_toggling_off(&mut self, allow_off: bool) {
         self.flags.set(FieldFlags::NO_TOGGLE_TO_OFF, !allow_off);
     }
 
+    /// Set whether to toggle on all buttons with the same value simultaneously.
+    /// Default: false
     pub fn set_radios_in_unison(&mut self, in_unison: bool) {
         self.flags.set(FieldFlags::RADIOS_IN_UNISON, in_unison);
     }
 
+    /// Create a widget annotation for the radio group field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `value`: The value this widget annotation represents in the radio group.
+    /// - `off_appearance`: The appearance of the widget annotation when the radio button is off.
+    /// - `on_appearance`: The appearance of the widget annotation when the radio button is on.
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -258,7 +355,6 @@ impl FormField<kind::Radio> {
         on_appearance: Stream,
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
-            self.name.clone(),
             rect,
             "Off".to_string(),
             off_appearance,
@@ -286,99 +382,68 @@ impl FormField<kind::Text> {
     }
 
     pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
-        WidgetAnnotation::simple(self.name.clone(), rect, appearance)
+        WidgetAnnotation::simple(rect, appearance)
     }
 }
 
+#[allow(private_bounds)]
 impl<T: SerializableField> FormField<T> {
     fn serialize_field(
         &self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
-        root_ref: Ref,
-        annotations: Option<&[Ref]>,
-    ) {
+        parent_ref: Option<Ref>,
+    ) -> Ref {
+        let root_ref = self.identifier.unwrap_or_else(|| sc.new_ref());
         let mut field = chunk_container.non_stream.fields.form_field(root_ref);
 
-        field
-            .partial_name(TextStr(self.name.rsplit('.').next().unwrap_or(&self.name)))
-            .field_flags(self.flags);
+        let mut flags = self.flags;
+        if sc.serialize_settings().pdf_version() < PdfVersion::Pdf15 {
+            flags.remove(FieldFlags::RADIOS_IN_UNISON);
+        }
+
+        field.partial_name(TextStr(&self.name)).field_flags(flags);
+
+        if let Some(parent_ref) = parent_ref {
+            field.parent(parent_ref);
+        }
+
+        if let Some(alt_name) = &self.alt_name {
+            field.alternate_name(TextStr(alt_name));
+        }
+
+        if let Some(mapping_name) = &self.mapping_name {
+            field.mapping_name(TextStr(mapping_name));
+        }
 
         self.kind.serialize_field(&mut field);
 
-        if let Some(children) = annotations {
-            field.children(children.iter().copied());
+        if !self.annotations.is_empty() {
+            let annotations = self.annotations.iter().map(|identifier| {
+                let page_annotations = sc.page_infos()[identifier.page_index].annotations();
+                page_annotations[identifier.annot_index].0
+            });
+            field.children(annotations);
         }
+
+        root_ref
     }
 }
-
-#[allow(missing_docs)]
-#[derive(Debug, Clone)]
-pub enum FieldKind {
-    PushButton(FormField<kind::PushButton>),
-    Checkbox(FormField<kind::Checkbox>),
-    Radio(FormField<kind::Radio>),
-    Text(FormField<kind::Text>),
-}
-
-impl FieldKind {
-    fn serialize_field(
-        &self,
-        sc: &mut SerializeContext,
-        chunk_container: &mut ChunkContainer,
-        root_ref: Ref,
-        annotations: Option<&[Ref]>,
-    ) {
-        match self {
-            Self::PushButton(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-            Self::Checkbox(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-            Self::Radio(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-            Self::Text(f) => f.serialize_field(sc, chunk_container, root_ref, annotations),
-        }
-    }
-
-    fn get_name(&self) -> &String {
-        match self {
-            Self::PushButton(f) => &f.name,
-            Self::Checkbox(f) => &f.name,
-            Self::Radio(f) => &f.name,
-            Self::Text(f) => &f.name,
-        }
-    }
-}
-
-impl Ord for FieldKind {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.get_name().cmp(other.get_name())
-    }
-}
-
-impl PartialOrd for FieldKind {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for FieldKind {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_name() == other.get_name()
-    }
-}
-
-impl Eq for FieldKind {}
 
 pub(crate) trait SerializableField {
     fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>);
 }
 
-mod kind {
-    use pdf_writer::{types::CheckBoxState, Name, TextStr};
+/// Field kind structs.
+pub mod kind {
+    use pdf_writer::TextStr;
+    use pdf_writer::{types::CheckBoxState, Name};
 
-    use crate::forms::variable_text::VariableAppearance;
-
+    use super::variable_text::VariableAppearance;
     use super::SerializableField;
 
-    #[allow(missing_docs)]
+    /// A push button.
+    /// Create a field of this type via [`FormField::push_button`](super::FormField::push_button).
     #[derive(Debug, Clone, Default)]
     pub struct PushButton;
 
@@ -388,7 +453,8 @@ mod kind {
         }
     }
 
-    #[allow(missing_docs)]
+    /// A checkbox.
+    /// Create a field of this type via [`FormField::checkbox`](super::FormField::checkbox).
     #[derive(Debug, Clone, Default)]
     pub struct Checkbox {
         pub(super) checked: Option<bool>,
@@ -415,7 +481,8 @@ mod kind {
         }
     }
 
-    #[allow(missing_docs)]
+    /// A radio group.
+    /// Create a field of this type via [`FormField::radio`](super::FormField::radio).
     #[derive(Debug, Clone, Default)]
     pub struct Radio {
         pub(super) value: Option<String>,
@@ -463,31 +530,8 @@ mod kind {
     }
 }
 
-impl From<FormField<kind::PushButton>> for FieldKind {
-    fn from(value: FormField<kind::PushButton>) -> Self {
-        Self::PushButton(value)
-    }
-}
-
-impl From<FormField<kind::Checkbox>> for FieldKind {
-    fn from(value: FormField<kind::Checkbox>) -> Self {
-        Self::Checkbox(value)
-    }
-}
-
-impl From<FormField<kind::Radio>> for FieldKind {
-    fn from(value: FormField<kind::Radio>) -> Self {
-        Self::Radio(value)
-    }
-}
-
-impl From<FormField<kind::Text>> for FieldKind {
-    fn from(value: FormField<kind::Text>) -> Self {
-        Self::Text(value)
-    }
-}
-
-mod variable_text {
+#[allow(missing_docs)]
+pub mod variable_text {
     use pdf_writer::Buf;
 
     use crate::{
