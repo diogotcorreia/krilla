@@ -26,12 +26,12 @@ fn main() {
     };
 
     // Create a checkbox.
-    let mut checkbox = FormField::checkbox("checkbox".to_string());
+    let mut checkbox = FormField::checkbox("checkbox".to_string(), false);
     // Set an alternative name, for accessibility purposes.
     checkbox.set_alt_name("A checkbox".to_string());
 
     // Create a radio group.
-    let mut radio_group = FormField::radio("radio".to_string());
+    let mut radio_group = FormField::radio("radio".to_string(), None);
     // Set an alternative name, for accessibility purposes.
     radio_group.set_alt_name("A radio group".to_string());
     // Disallow toggling the radio group back to off.

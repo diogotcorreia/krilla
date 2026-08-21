@@ -354,6 +354,7 @@ impl WidgetAnnotation<SimpleAppearance> {
 impl WidgetAnnotation<DualStateAppearance> {
     pub(crate) fn dual(
         rect: Rect,
+        value: bool,
         off_state: String,
         off_appearance: Stream,
         on_state: String,
@@ -362,6 +363,7 @@ impl WidgetAnnotation<DualStateAppearance> {
         Self {
             rect,
             appearance: DualStateAppearance {
+                value,
                 off_state,
                 off_appearance: SimpleAppearance {
                     normal: off_appearance,
@@ -517,6 +519,7 @@ pub struct SimpleAppearance {
 
 /// The appearance of an annotation that has two states (e.g., on/off).
 pub struct DualStateAppearance {
+    value: bool,
     off_state: String,
     off_appearance: SimpleAppearance,
     on_state: String,
@@ -580,6 +583,7 @@ impl SerializableAppearance for SimpleAppearance {
 
 impl SerializableAppearance for DualStateAppearance {
     type RefsHolder = (
+        bool,                                    // value
         (String, Ref, Option<Ref>, Option<Ref>), // off
         (String, Ref, Option<Ref>, Option<Ref>), // on
     );
@@ -593,6 +597,7 @@ impl SerializableAppearance for DualStateAppearance {
         let on_refs = self.on_appearance.register_refs(sc, chunk_container);
 
         (
+            self.value,
             (self.off_state, off_refs.0, off_refs.1, off_refs.2),
             (self.on_state, on_refs.0, on_refs.1, on_refs.2),
         )
@@ -602,12 +607,11 @@ impl SerializableAppearance for DualStateAppearance {
         annotation: &mut pdf_writer::writers::Annotation<'_>,
         refs: Self::RefsHolder,
     ) {
-        let (off, on) = refs;
+        let (value, off, on) = refs;
         let off_name = Name(off.0.as_bytes());
         let on_name = Name(on.0.as_bytes());
 
-        // TODO: this should come from checkbox/radio group
-        annotation.appearance_state(off_name);
+        annotation.appearance_state(if value { on_name } else { off_name });
 
         let mut appearance = annotation.appearance();
         appearance

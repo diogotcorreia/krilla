@@ -11,6 +11,7 @@ use crate::{
     annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
     chunk_container::ChunkContainer,
     configure::PdfVersion,
+    form::kind::{Checkbox, Radio},
     geom::Rect,
     serialize::SerializeContext,
     stream::Stream,
@@ -245,17 +246,16 @@ impl FormField<kind::PushButton> {
 impl FormField<kind::Checkbox> {
     /// Create a checkbox field.
     /// The field name must not contain any period character (`.`).
-    pub fn checkbox(name: String) -> Self {
+    pub fn checkbox(name: String, checked: bool) -> Self {
         debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
+            kind: Checkbox {
+                checked,
+                ..Default::default()
+            },
             ..Default::default()
         }
-    }
-
-    /// Set whether this checkbox is checked.
-    pub fn set_checked(&mut self, checked: bool) {
-        self.kind.checked = Some(checked);
     }
 
     /// Set whether this checkbox is checked by default.
@@ -276,6 +276,7 @@ impl FormField<kind::Checkbox> {
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
             rect,
+            self.kind.checked,
             "Off".to_string(),
             off_appearance,
             "Yes".to_string(),
@@ -287,27 +288,25 @@ impl FormField<kind::Checkbox> {
 impl FormField<kind::Radio> {
     /// Create a radio group field.
     /// The field name must not contain any period character (`.`).
-    pub fn radio(name: String) -> Self {
+    /// If the provided value is None, no option is selected.
+    pub fn radio(name: String, value: Option<String>) -> Self {
         debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::RADIO,
+            kind: Radio {
+                value,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
 
-    /// Set the value of the radio group.
-    /// It should correspond to a value of one of the annotations.
-    // TODO: take Option<String> instead?
-    pub fn set_value(&mut self, value: String) {
-        self.kind.value = Some(value);
-    }
-
     /// Set the default value of the radio group.
     /// It should correspond to a value of one of the annotations.
-    // TODO: take Option<String> instead?
-    pub fn set_default_value(&mut self, value: String) {
-        self.kind.default_value = Some(value);
+    /// If the provided value is None, no option is selected.
+    pub fn set_default_value(&mut self, value: Option<String>) {
+        self.kind.default_value = value;
     }
 
     /// Set whether to allow unselecting all buttons of this radio group.
@@ -337,6 +336,7 @@ impl FormField<kind::Radio> {
     ) -> WidgetAnnotation<DualStateAppearance> {
         WidgetAnnotation::dual(
             rect,
+            self.kind.value.as_ref() == Some(&value),
             "Off".to_string(),
             off_appearance,
             value,
@@ -414,13 +414,13 @@ pub mod kind {
     /// Create a field of this type via [`FormField::checkbox`](super::FormField::checkbox).
     #[derive(Debug, Clone, Default)]
     pub struct Checkbox {
-        pub(super) checked: Option<bool>,
+        pub(super) checked: bool,
         pub(super) default_checked: Option<bool>,
     }
 
     impl SerializableField for Checkbox {
         fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
-            let value = if self.checked.unwrap_or(false) {
+            let value = if self.checked {
                 CheckBoxState::Yes
             } else {
                 CheckBoxState::Off

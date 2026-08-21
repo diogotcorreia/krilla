@@ -46,10 +46,10 @@ fn forms_checkbox(d: &mut Document) {
     let off_appearance = square_stream(&mut surface, red_fill(1.0));
     surface.finish();
 
-    let mut checkbox = FormField::checkbox("checkbox1".to_string());
+    let mut checkbox = FormField::checkbox("checkbox1".to_string(), true);
     checkbox.set_alt_name("A checkbox".to_string());
     checkbox.set_mapping_name("chx1".to_string());
-    checkbox.set_default_checked(true);
+    checkbox.set_default_checked(false);
 
     let checkbox_widget = checkbox.new_widget(
         Rect::from_xywh(50.0, 0.0, 10.0, 10.0).unwrap(),
@@ -76,7 +76,7 @@ fn forms_radio_group(d: &mut Document) {
     let off_appearance = square_stream(&mut surface, red_fill(1.0));
     surface.finish();
 
-    let mut radio_group = FormField::radio("radio1".to_string());
+    let mut radio_group = FormField::radio("radio1".to_string(), Some("option1".to_string()));
     radio_group.set_required(true);
     radio_group.set_export(false);
     radio_group.set_radios_in_unison(true);
@@ -124,7 +124,7 @@ fn forms_reset_action(d: &mut Document) {
     let button_appearance = square_stream(&mut surface, blue_fill(1.0));
     surface.finish();
 
-    let mut checkbox_1 = FormField::checkbox("checkbox1".to_string());
+    let mut checkbox_1 = FormField::checkbox("checkbox1".to_string(), false);
     checkbox_1.set_default_checked(true);
     let checkbox_1_widget = checkbox_1.new_widget(
         Rect::from_xywh(20.0, 0.0, 10.0, 10.0).unwrap(),
@@ -132,7 +132,7 @@ fn forms_reset_action(d: &mut Document) {
         on_appearance.clone(),
     );
 
-    let mut checkbox_2 = FormField::checkbox("checkbox2".to_string());
+    let mut checkbox_2 = FormField::checkbox("checkbox2".to_string(), false);
     checkbox_2.set_default_checked(false);
     let checkbox_2_widget = checkbox_2.new_widget(
         Rect::from_xywh(30.0, 0.0, 10.0, 10.0).unwrap(),
