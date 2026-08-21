@@ -323,11 +323,11 @@ impl<T> WidgetAnnotation<T> {
 }
 
 /// Applies to widget annotations with a single state appearance.
-impl WidgetAnnotation<SimpleAppearance> {
+impl WidgetAnnotation<SimpleAppearanceStream> {
     pub(crate) fn simple(rect: Rect, appearance: Stream) -> Self {
         Self {
             rect,
-            appearance: SimpleAppearance {
+            appearance: SimpleAppearanceStream {
                 normal: appearance,
                 rollover: None,
                 down: None,
@@ -351,7 +351,7 @@ impl WidgetAnnotation<SimpleAppearance> {
 }
 
 /// Applies to widget annotations with a dual state appearance (e.g., on/off).
-impl WidgetAnnotation<DualStateAppearance> {
+impl WidgetAnnotation<DualStateAppearanceStream> {
     pub(crate) fn dual(
         rect: Rect,
         value: bool,
@@ -362,16 +362,16 @@ impl WidgetAnnotation<DualStateAppearance> {
     ) -> Self {
         Self {
             rect,
-            appearance: DualStateAppearance {
+            appearance: DualStateAppearanceStream {
                 value,
                 off_state,
-                off_appearance: SimpleAppearance {
+                off_appearance: SimpleAppearanceStream {
                     normal: off_appearance,
                     rollover: None,
                     down: None,
                 },
                 on_state,
-                on_appearance: SimpleAppearance {
+                on_appearance: SimpleAppearanceStream {
                     normal: on_appearance,
                     rollover: None,
                     down: None,
@@ -454,9 +454,9 @@ impl<T: SerializableAppearance> WidgetAnnotation<T> {
 /// A type-agnostic widget annotation.
 pub enum WidgetAnnotationKind {
     /// A widget annotation whose appearance has a single state.
-    Simple(Box<WidgetAnnotation<SimpleAppearance>>),
+    Simple(Box<WidgetAnnotation<SimpleAppearanceStream>>),
     /// A widget annotation whose appearance has two states (e.g., on/off).
-    DualState(Box<WidgetAnnotation<DualStateAppearance>>),
+    DualState(Box<WidgetAnnotation<DualStateAppearanceStream>>),
 }
 
 impl WidgetAnnotationKind {
@@ -486,7 +486,6 @@ impl WidgetAnnotationKind {
 }
 
 trait SerializableAppearance {
-    // TODO: refactor, this is the only way I could find to make the borrow checker happy
     type RefsHolder;
 
     fn register_refs(
@@ -499,41 +498,47 @@ trait SerializableAppearance {
         annotation: &mut pdf_writer::writers::Annotation<'_>,
         refs: Self::RefsHolder,
     );
+}
 
-    fn register_appearance_entry(
-        sc: &mut SerializeContext,
-        chunk_container: &mut ChunkContainer,
-        appearance: Stream,
-    ) -> Ref {
-        let xobject = XObject::new(appearance, false, false, None);
-        sc.register_cacheable(chunk_container, xobject)
-    }
+fn register_appearance_entry(
+    sc: &mut SerializeContext,
+    chunk_container: &mut ChunkContainer,
+    appearance: Stream,
+) -> Ref {
+    let xobject = XObject::new(appearance, false, false, None);
+    sc.register_cacheable(chunk_container, xobject)
 }
 
 /// The appearance of an annotation that has a single state.
-pub struct SimpleAppearance {
-    normal: Stream,
-    rollover: Option<Stream>,
-    down: Option<Stream>,
+pub struct SimpleAppearance<T> {
+    normal: T,
+    rollover: Option<T>,
+    down: Option<T>,
 }
+
+/// The appearance streams of an annotation that has a single state.
+pub type SimpleAppearanceStream = SimpleAppearance<Stream>;
 
 /// The appearance of an annotation that has two states (e.g., on/off).
-pub struct DualStateAppearance {
+pub struct DualStateAppearance<T> {
     value: bool,
     off_state: String,
-    off_appearance: SimpleAppearance,
+    off_appearance: SimpleAppearance<T>,
     on_state: String,
-    on_appearance: SimpleAppearance,
+    on_appearance: SimpleAppearance<T>,
 }
 
-impl From<WidgetAnnotation<SimpleAppearance>> for WidgetAnnotationKind {
-    fn from(value: WidgetAnnotation<SimpleAppearance>) -> Self {
+/// The appearance streams of an annotation that has two states (e.g., on/off).
+pub type DualStateAppearanceStream = DualStateAppearance<Stream>;
+
+impl From<WidgetAnnotation<SimpleAppearanceStream>> for WidgetAnnotationKind {
+    fn from(value: WidgetAnnotation<SimpleAppearanceStream>) -> Self {
         Self::Simple(Box::new(value))
     }
 }
 
-impl From<WidgetAnnotation<DualStateAppearance>> for WidgetAnnotationKind {
-    fn from(value: WidgetAnnotation<DualStateAppearance>) -> Self {
+impl From<WidgetAnnotation<DualStateAppearanceStream>> for WidgetAnnotationKind {
+    fn from(value: WidgetAnnotation<DualStateAppearanceStream>) -> Self {
         Self::DualState(Box::new(value))
     }
 }
@@ -547,23 +552,27 @@ where
     }
 }
 
-impl SerializableAppearance for SimpleAppearance {
-    type RefsHolder = (Ref, Option<Ref>, Option<Ref>);
+impl SerializableAppearance for SimpleAppearanceStream {
+    type RefsHolder = SimpleAppearance<Ref>;
 
     fn register_refs(
         self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
     ) -> Self::RefsHolder {
-        let normal_ref = Self::register_appearance_entry(sc, chunk_container, self.normal);
+        let normal_ref = register_appearance_entry(sc, chunk_container, self.normal);
         let rollover_ref = self
             .rollover
-            .map(|stream| Self::register_appearance_entry(sc, chunk_container, stream));
+            .map(|stream| register_appearance_entry(sc, chunk_container, stream));
         let down_ref = self
             .down
-            .map(|stream| Self::register_appearance_entry(sc, chunk_container, stream));
+            .map(|stream| register_appearance_entry(sc, chunk_container, stream));
 
-        (normal_ref, rollover_ref, down_ref)
+        Self::RefsHolder {
+            normal: normal_ref,
+            rollover: rollover_ref,
+            down: down_ref,
+        }
     }
 
     fn serialize_appearance(
@@ -571,22 +580,18 @@ impl SerializableAppearance for SimpleAppearance {
         refs: Self::RefsHolder,
     ) {
         let mut appearance = annotation.appearance();
-        appearance.normal().stream(refs.0);
-        if let Some(ref_) = refs.1 {
+        appearance.normal().stream(refs.normal);
+        if let Some(ref_) = refs.rollover {
             appearance.rollover().stream(ref_);
         }
-        if let Some(ref_) = refs.2 {
+        if let Some(ref_) = refs.down {
             appearance.alternate().stream(ref_);
         }
     }
 }
 
-impl SerializableAppearance for DualStateAppearance {
-    type RefsHolder = (
-        bool,                                    // value
-        (String, Ref, Option<Ref>, Option<Ref>), // off
-        (String, Ref, Option<Ref>, Option<Ref>), // on
-    );
+impl SerializableAppearance for DualStateAppearanceStream {
+    type RefsHolder = DualStateAppearance<Ref>;
 
     fn register_refs(
         self,
@@ -596,46 +601,47 @@ impl SerializableAppearance for DualStateAppearance {
         let off_refs = self.off_appearance.register_refs(sc, chunk_container);
         let on_refs = self.on_appearance.register_refs(sc, chunk_container);
 
-        (
-            self.value,
-            (self.off_state, off_refs.0, off_refs.1, off_refs.2),
-            (self.on_state, on_refs.0, on_refs.1, on_refs.2),
-        )
+        Self::RefsHolder {
+            value: self.value,
+            off_state: self.off_state,
+            off_appearance: off_refs,
+            on_state: self.on_state,
+            on_appearance: on_refs,
+        }
     }
 
     fn serialize_appearance(
         annotation: &mut pdf_writer::writers::Annotation<'_>,
         refs: Self::RefsHolder,
     ) {
-        let (value, off, on) = refs;
-        let off_name = Name(off.0.as_bytes());
-        let on_name = Name(on.0.as_bytes());
+        let off_name = Name(refs.off_state.as_bytes());
+        let on_name = Name(refs.on_state.as_bytes());
 
-        annotation.appearance_state(if value { on_name } else { off_name });
+        annotation.appearance_state(if refs.value { on_name } else { off_name });
 
         let mut appearance = annotation.appearance();
         appearance
             .normal()
             .streams()
-            .pair(off_name, off.1)
-            .pair(on_name, on.1);
-        if off.2.is_some() || on.2.is_some() {
+            .pair(off_name, refs.off_appearance.normal)
+            .pair(on_name, refs.on_appearance.normal);
+        if refs.off_appearance.rollover.is_some() || refs.on_appearance.rollover.is_some() {
             let mut dict = appearance.rollover().streams();
 
-            if let Some(ref_) = off.2 {
+            if let Some(ref_) = refs.off_appearance.rollover {
                 dict.pair(off_name, ref_);
             }
-            if let Some(ref_) = on.2 {
+            if let Some(ref_) = refs.on_appearance.rollover {
                 dict.pair(on_name, ref_);
             }
         }
-        if off.3.is_some() || on.3.is_some() {
+        if refs.off_appearance.down.is_some() || refs.on_appearance.down.is_some() {
             let mut dict = appearance.alternate().streams();
 
-            if let Some(ref_) = off.3 {
+            if let Some(ref_) = refs.off_appearance.down {
                 dict.pair(off_name, ref_);
             }
-            if let Some(ref_) = on.3 {
+            if let Some(ref_) = refs.on_appearance.down {
                 dict.pair(on_name, ref_);
             }
         }

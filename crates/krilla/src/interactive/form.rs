@@ -8,7 +8,7 @@
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
-    annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
+    annotation::{DualStateAppearanceStream, SimpleAppearanceStream, WidgetAnnotation},
     chunk_container::ChunkContainer,
     configure::PdfVersion,
     form::kind::{Checkbox, Radio},
@@ -238,7 +238,11 @@ impl FormField<kind::PushButton> {
     ///
     /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
     /// - `appearance`: The appearance of the widget annotation.
-    pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
+    pub fn new_widget(
+        &self,
+        rect: Rect,
+        appearance: Stream,
+    ) -> WidgetAnnotation<SimpleAppearanceStream> {
         WidgetAnnotation::simple(rect, appearance)
     }
 }
@@ -273,7 +277,7 @@ impl FormField<kind::Checkbox> {
         rect: Rect,
         off_appearance: Stream,
         on_appearance: Stream,
-    ) -> WidgetAnnotation<DualStateAppearance> {
+    ) -> WidgetAnnotation<DualStateAppearanceStream> {
         WidgetAnnotation::dual(
             rect,
             self.kind.checked,
@@ -333,7 +337,7 @@ impl FormField<kind::Radio> {
         value: String,
         off_appearance: Stream,
         on_appearance: Stream,
-    ) -> WidgetAnnotation<DualStateAppearance> {
+    ) -> WidgetAnnotation<DualStateAppearanceStream> {
         WidgetAnnotation::dual(
             rect,
             self.kind.value.as_ref() == Some(&value),
