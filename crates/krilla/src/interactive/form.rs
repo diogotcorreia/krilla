@@ -200,10 +200,25 @@ impl<T> FormField<T> {
         self.alt_name = Some(alt_name);
     }
 
+    /// Set the alternative name of the field.
+    /// This is used to refer to this field in the user interface,
+    /// as well as for accessibility purposes.
+    pub fn with_alt_name(mut self, alt_name: String) -> Self {
+        self.set_alt_name(alt_name);
+        self
+    }
+
     /// Set the mapping name of the field.
     /// This is used during submission/export.
     pub fn set_mapping_name(&mut self, mapping_name: String) {
         self.mapping_name = Some(mapping_name);
+    }
+
+    /// Set the mapping name of the field.
+    /// This is used during submission/export.
+    pub fn with_mapping_name(mut self, mapping_name: String) -> Self {
+        self.set_mapping_name(mapping_name);
+        self
     }
 
     /// Set whether the field is read-only. Default: `false`.
@@ -211,14 +226,32 @@ impl<T> FormField<T> {
         self.flags.set(FieldFlags::READ_ONLY, read_only);
     }
 
+    /// Set whether the field is read-only. Default: `false`.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.set_read_only(read_only);
+        self
+    }
+
     /// Set whether the field is required. Default: `false`.
     pub fn set_required(&mut self, required: bool) {
         self.flags.set(FieldFlags::REQUIRED, required);
     }
 
+    /// Set whether the field is required. Default: `false`.
+    pub fn with_required(mut self, required: bool) -> Self {
+        self.set_required(required);
+        self
+    }
+
     /// Set whether the field will be exported during submission. Default: `true`.
     pub fn set_export(&mut self, export: bool) {
         self.flags.set(FieldFlags::NO_EXPORT, !export);
+    }
+
+    /// Set whether the field will be exported during submission. Default: `true`.
+    pub fn with_export(mut self, export: bool) -> Self {
+        self.set_export(export);
+        self
     }
 }
 
@@ -267,6 +300,12 @@ impl FormField<kind::Checkbox> {
         self.kind.default_checked = Some(checked);
     }
 
+    /// Set whether this checkbox is checked by default.
+    pub fn with_default_checked(mut self, checked: bool) -> Self {
+        self.set_default_checked(checked);
+        self
+    }
+
     /// Create a widget annotation for the checkbox field.
     ///
     /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
@@ -313,16 +352,38 @@ impl FormField<kind::Radio> {
         self.kind.default_value = value;
     }
 
+    /// Set the default value of the radio group.
+    /// It should correspond to a value of one of the annotations.
+    /// If the provided value is None, no option is selected.
+    pub fn with_default_value(mut self, value: Option<String>) -> Self {
+        self.set_default_value(value);
+        self
+    }
+
     /// Set whether to allow unselecting all buttons of this radio group.
     /// Default: true
     pub fn set_allow_toggling_off(&mut self, allow_off: bool) {
         self.flags.set(FieldFlags::NO_TOGGLE_TO_OFF, !allow_off);
     }
 
+    /// Set whether to allow unselecting all buttons of this radio group.
+    /// Default: true
+    pub fn with_allow_toggling_off(mut self, allow_off: bool) -> Self {
+        self.set_allow_toggling_off(allow_off);
+        self
+    }
+
     /// Set whether to toggle on all buttons with the same value simultaneously.
     /// Default: false
     pub fn set_radios_in_unison(&mut self, in_unison: bool) {
         self.flags.set(FieldFlags::RADIOS_IN_UNISON, in_unison);
+    }
+
+    /// Set whether to toggle on all buttons with the same value simultaneously.
+    /// Default: false
+    pub fn with_radios_in_unison(mut self, in_unison: bool) -> Self {
+        self.set_radios_in_unison(in_unison);
+        self
     }
 
     /// Create a widget annotation for the radio group field.
