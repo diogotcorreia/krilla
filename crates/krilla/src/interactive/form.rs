@@ -8,7 +8,7 @@
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
-    annotation::{DualStateAppearanceStream, SimpleAppearanceStream, WidgetAnnotation},
+    annotation::{DualStateAppearanceStream, NamedAppearanceStream, WidgetAnnotation},
     chunk_container::ChunkContainer,
     configure::PdfVersion,
     form::kind::{Checkbox, Radio},
@@ -275,8 +275,8 @@ impl FormField<kind::PushButton> {
         &self,
         rect: Rect,
         appearance: Stream,
-    ) -> WidgetAnnotation<SimpleAppearanceStream> {
-        WidgetAnnotation::simple(rect, appearance)
+    ) -> WidgetAnnotation<NamedAppearanceStream> {
+        WidgetAnnotation::named(rect, "Yes".to_string(), appearance)
     }
 }
 
