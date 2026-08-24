@@ -55,6 +55,18 @@ pub struct FieldTree {
     pub fields: Vec<Node>,
 }
 
+impl FieldTree {
+    /// Create a new field tree.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Append a new child to the field tree.
+    pub fn push(&mut self, node: impl Into<Node>) {
+        self.fields.push(node.into());
+    }
+}
+
 /// A field group.
 pub struct FieldGroup {
     /// The name of the field group.
@@ -65,6 +77,19 @@ pub struct FieldGroup {
 }
 
 impl FieldGroup {
+    /// Create a new field group with the given name.
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            fields: vec![],
+        }
+    }
+
+    /// Append a new child to the field group.
+    pub fn push(&mut self, node: impl Into<Node>) {
+        self.fields.push(node.into());
+    }
+
     fn serialize_group(
         &self,
         sc: &mut SerializeContext,
