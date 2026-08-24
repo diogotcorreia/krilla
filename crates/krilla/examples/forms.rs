@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use krilla::action::ResetFormAction;
 use krilla::color::rgb;
 use krilla::form::{FieldGroup, FieldTree, FormField};
-use krilla::geom::{PathBuilder, Point, Rect, Transform};
+use krilla::geom::{PathBuilder, Point, Rect};
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};
 use krilla::text::Font;
@@ -61,16 +61,14 @@ fn main() {
         let mut builder = surface.stream_builder();
         let mut surface = builder.surface();
 
-        surface.push_transform(&Transform::from_scale(1.0, -1.0));
         surface.draw_text(
-            Point::from_xy(0.0, 0.0),
+            Point::from_xy(0.0, 12.0),
             font.clone(),
             8.0,
             "ON",
             false,
             TextDirection::Auto,
         );
-        surface.pop();
 
         surface.finish();
         builder.finish()
@@ -81,16 +79,14 @@ fn main() {
         let mut builder = surface.stream_builder();
         let mut surface = builder.surface();
 
-        surface.push_transform(&Transform::from_scale(1.0, -1.0));
         surface.draw_text(
-            Point::from_xy(0.0, 0.0),
+            Point::from_xy(0.0, 12.0),
             font.clone(),
             8.0,
             "OFF",
             false,
             TextDirection::Auto,
         );
-        surface.pop();
 
         surface.finish();
         builder.finish()
@@ -199,16 +195,14 @@ fn main() {
         let mut builder = surface.stream_builder();
         let mut surface = builder.surface();
 
-        surface.push_transform(&Transform::from_scale(1.0, -1.0));
         surface.draw_text(
-            Point::from_xy(0.0, 0.0),
+            Point::from_xy(0.0, 12.0),
             font.clone(),
             8.0,
             "Reset",
             false,
             TextDirection::Auto,
         );
-        surface.pop();
 
         surface.finish();
         builder.finish()
@@ -216,7 +210,7 @@ fn main() {
 
     // Create a widget annotation (visual representation) for the push button.
     let mut reset_button_widget = reset_button.new_widget(
-        Rect::from_xywh(40.0, 120.0, 20.0, 20.0).unwrap(),
+        Rect::from_xywh(40.0, 120.0, 40.0, 20.0).unwrap(),
         button_appearance,
     );
     // Set an on click action (reset all fields).

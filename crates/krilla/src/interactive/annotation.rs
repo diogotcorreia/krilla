@@ -473,7 +473,9 @@ impl<T: SerializableAppearance> WidgetAnnotation<T> {
         root_ref: Ref,
         page_height: f32,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
-        let appearance_refs = self.appearance.register_refs(sc, chunk_container);
+        let appearance_refs = self
+            .appearance
+            .register_refs(sc, chunk_container, self.rect);
 
         let chunk = &mut chunk_container.non_stream.annotations;
         let mut annotation = chunk
@@ -545,6 +547,7 @@ trait SerializableAppearance {
         self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        rect: Rect,
     ) -> Self::RefsHolder;
 
     fn serialize_appearance(
@@ -557,8 +560,11 @@ fn register_appearance_entry(
     sc: &mut SerializeContext,
     chunk_container: &mut ChunkContainer,
     appearance: Stream,
+    rect: Rect,
 ) -> Ref {
-    let xobject = XObject::new(appearance, false, false, None);
+    let bbox = Rect::from_xywh(0.0, 0.0, rect.width(), rect.height()).unwrap();
+    let transform = page_root_transform(bbox.height());
+    let xobject = XObject::new(appearance, false, false, Some(bbox), Some(transform));
     sc.register_cacheable(chunk_container, xobject)
 }
 
@@ -612,14 +618,15 @@ impl SerializableAppearance for SimpleAppearanceStream {
         self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        rect: Rect,
     ) -> Self::RefsHolder {
-        let normal_ref = register_appearance_entry(sc, chunk_container, self.normal);
+        let normal_ref = register_appearance_entry(sc, chunk_container, self.normal, rect);
         let rollover_ref = self
             .rollover
-            .map(|stream| register_appearance_entry(sc, chunk_container, stream));
+            .map(|stream| register_appearance_entry(sc, chunk_container, stream, rect));
         let down_ref = self
             .down
-            .map(|stream| register_appearance_entry(sc, chunk_container, stream));
+            .map(|stream| register_appearance_entry(sc, chunk_container, stream, rect));
 
         Self::RefsHolder {
             normal: normal_ref,
@@ -650,9 +657,10 @@ impl SerializableAppearance for DualStateAppearanceStream {
         self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
+        rect: Rect,
     ) -> Self::RefsHolder {
-        let off_refs = self.off_appearance.register_refs(sc, chunk_container);
-        let on_refs = self.on_appearance.register_refs(sc, chunk_container);
+        let off_refs = self.off_appearance.register_refs(sc, chunk_container, rect);
+        let on_refs = self.on_appearance.register_refs(sc, chunk_container, rect);
 
         Self::RefsHolder {
             value: self.value,
