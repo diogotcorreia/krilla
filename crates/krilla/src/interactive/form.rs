@@ -10,11 +10,12 @@ use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 use crate::{
     annotation::{DualStateAppearanceStream, NamedAppearanceStream, WidgetAnnotation},
     chunk_container::ChunkContainer,
-    configure::PdfVersion,
+    configure::{PdfVersion, ValidationError},
     form::kind::{Checkbox, Radio},
     geom::Rect,
     serialize::SerializeContext,
     stream::Stream,
+    surface::Location,
     tagging::AnnotationIdentifier,
 };
 
@@ -215,12 +216,16 @@ pub struct FormField<T> {
     pub(crate) identifier: Option<Ref>,
     pub(crate) annotations: Vec<AnnotationIdentifier>,
     kind: T,
+    location: Option<Location>,
 }
 
 impl<T> FormField<T> {
     /// Set the alternative name of the field.
     /// This is used to refer to this field in the user interface,
     /// as well as for accessibility purposes.
+    ///
+    /// Note that the alt name might be required in some cases, for example
+    /// when exporting to PDF/UA.
     pub fn set_alt_name(&mut self, alt_name: String) {
         self.alt_name = Some(alt_name);
     }
@@ -228,6 +233,9 @@ impl<T> FormField<T> {
     /// Set the alternative name of the field.
     /// This is used to refer to this field in the user interface,
     /// as well as for accessibility purposes.
+    ///
+    /// Note that the alt name might be required in some cases, for example
+    /// when exporting to PDF/UA.
     pub fn with_alt_name(mut self, alt_name: String) -> Self {
         self.set_alt_name(alt_name);
         self
@@ -276,6 +284,17 @@ impl<T> FormField<T> {
     /// Set whether the field will be exported during submission. Default: `true`.
     pub fn with_export(mut self, export: bool) -> Self {
         self.set_export(export);
+        self
+    }
+
+    /// Set the location of the field.
+    pub fn set_location(&mut self, location: Option<Location>) {
+        self.location = location;
+    }
+
+    /// Set the location of the field.
+    pub fn with_location(mut self, location: Option<Location>) -> Self {
+        self.set_location(location);
         self
     }
 }
@@ -459,6 +478,9 @@ impl<T: SerializableField> FormField<T> {
 
         if let Some(alt_name) = &self.alt_name {
             field.alternate_name(TextStr(alt_name));
+        }
+        if self.alt_name.as_ref().is_none_or(String::is_empty) {
+            sc.register_validation_error(ValidationError::MissingFieldAltName(self.location));
         }
 
         if let Some(mapping_name) = &self.mapping_name {

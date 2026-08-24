@@ -46,6 +46,22 @@ impl Annotation {
         }
     }
 
+    /// Create a new widget annotation with some alt text.
+    ///
+    /// Note that the alt text might be required in some cases, for example
+    /// when exporting to PDF/UA.
+    pub fn new_widget(
+        annotation: impl Into<WidgetAnnotationKind>,
+        alt_text: Option<String>,
+    ) -> Self {
+        Self {
+            annotation_type: AnnotationType::Widget(annotation.into()),
+            alt: alt_text,
+            struct_parent: None,
+            location: None,
+        }
+    }
+
     /// Sets the location of the annotation.
     pub fn with_location(mut self, location: Option<Location>) -> Self {
         self.location = location;

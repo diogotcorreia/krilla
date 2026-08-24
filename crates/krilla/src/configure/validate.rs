@@ -123,6 +123,8 @@ pub enum ValidationError {
     MissingDocumentOutline,
     /// An annotation is missing an alt text.
     MissingAnnotationAltText(Option<Location>),
+    /// A form field is missing an alt name.
+    MissingFieldAltName(Option<Location>),
     /// The date of the document is missing.
     // We need this because for some standards we need to add the
     // xmp:History attribute.
@@ -575,6 +577,7 @@ impl Archival {
                 | ValidationError::NoDocumentLanguage
                 | ValidationError::MissingAltText(_)
                 | ValidationError::MissingAnnotationAltText(_)
+                | ValidationError::MissingFieldAltName(_)
                 | ValidationError::MissingTagging,
             ) => self == Self::A1_A,
 
@@ -633,6 +636,7 @@ impl Archival {
                 | ValidationError::NoDocumentLanguage
                 | ValidationError::MissingAltText(_)
                 | ValidationError::MissingAnnotationAltText(_)
+                | ValidationError::MissingFieldAltName(_)
                 | ValidationError::MissingTagging,
             ) => self == Self::A2_A || self == Self::A3_A,
             // Forbidden under PDF/A-2 and PDF/A-3 accessible and Unicode profiles.
@@ -675,6 +679,7 @@ impl Archival {
                 | ValidationError::MissingHeadingTitle
                 | ValidationError::MissingDocumentOutline
                 | ValidationError::MissingAnnotationAltText(_)
+                | ValidationError::MissingFieldAltName(_)
                 | ValidationError::Transparency(_)
                 | ValidationError::EmbeddedFile(
                     EmbedError::MissingDate | EmbedError::MissingMimeType,
@@ -1104,6 +1109,7 @@ impl Accessibility {
                 | ValidationError::MissingHeadingTitle
                 | ValidationError::MissingDocumentOutline
                 | ValidationError::MissingAnnotationAltText(_)
+                | ValidationError::MissingFieldAltName(_)
                 | ValidationError::EmbeddedFile(EmbedError::MissingDescription, _)
                 | ValidationError::MissingTagging
                 | ValidationError::EmbeddedPDF(_)

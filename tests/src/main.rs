@@ -825,6 +825,15 @@ pub fn basic_pattern_stream(mut stream_builder: StreamBuilder) -> Stream {
     stream_builder.finish()
 }
 
+pub fn square_stream(mut stream_builder: StreamBuilder, fill: Fill) -> Stream {
+    let mut stream_surface = stream_builder.surface();
+    stream_surface.set_fill(Some(fill));
+    stream_surface.draw_path(&rect_to_path(0.0, 0.0, 10.0, 10.0));
+    stream_surface.finish();
+
+    stream_builder.finish()
+}
+
 pub static FONTDB: LazyLock<Arc<fontdb::Database>> = LazyLock::new(|| {
     let mut fontdb = fontdb::Database::new();
     fontdb.load_fonts_dir(ASSETS_PATH.join("svg_fonts"));
