@@ -139,6 +139,11 @@ pub enum ValidationError {
     MissingTagging,
     /// The PDF contains an annotation with a rollover or down appearance.
     AnnotationHasConditionalAppearance(Option<Location>),
+    /// The PDF contains an action that can mutate the appearance of the document (e.g., multimedia
+    /// content, reset form, etc.).
+    ContainsMutatingAction(Option<Location>),
+    /// The PDF contains an annotation or field that has an additional-actions dictionary.
+    ContainsAdditionalActions(Option<Location>),
     /// The PDF contains another embedded PDF.
     ///
     /// This is currently forbidden in validated export because we cannot manually verify
@@ -553,6 +558,8 @@ impl Archival {
                 | ValidationError::ImageInterpolation(_)
                 | ValidationError::EmbeddedFile(EmbedError::Existence, _)
                 | ValidationError::AnnotationHasConditionalAppearance(_)
+                | ValidationError::ContainsMutatingAction(_)
+                | ValidationError::ContainsAdditionalActions(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-1 profiles.
@@ -599,6 +606,8 @@ impl Archival {
                 | ValidationError::MissingDocumentDate
                 | ValidationError::ImageInterpolation(_)
                 | ValidationError::AnnotationHasConditionalAppearance(_)
+                | ValidationError::ContainsMutatingAction(_)
+                | ValidationError::ContainsAdditionalActions(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-2 and PDF/A-3 profiles.
@@ -665,6 +674,7 @@ impl Archival {
                 | ValidationError::MissingDocumentDate
                 | ValidationError::ImageInterpolation(_)
                 | ValidationError::AnnotationHasConditionalAppearance(_)
+                | ValidationError::ContainsMutatingAction(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-4 profiles.
@@ -691,6 +701,7 @@ impl Archival {
                     _,
                 )
                 | ValidationError::MissingTagging
+                | ValidationError::ContainsAdditionalActions(_)
                 | ValidationError::RequiresNewerPdfVersion(
                     VersionedFeature::HeaderFooterArtifactSubtypes
                     | VersionedFeature::StructureOrderTabbing
@@ -1146,6 +1157,8 @@ impl Accessibility {
                     _,
                 )
                 | ValidationError::AnnotationHasConditionalAppearance(_)
+                | ValidationError::ContainsMutatingAction(_)
+                | ValidationError::ContainsAdditionalActions(_)
                 | ValidationError::MissingDocumentDate,
             ) => false,
         }

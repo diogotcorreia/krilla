@@ -9,9 +9,11 @@
 use pdf_writer::types::{ActionType, FormActionFlags};
 use pdf_writer::{Finish, Name, Str, TextStr};
 
+use crate::configure::ValidationError;
 use crate::error::KrillaResult;
 use crate::interactive::destination::Destination;
 use crate::serialize::SerializeContext;
+use crate::surface::Location;
 
 /// A type of action.
 pub enum Action {
@@ -28,6 +30,7 @@ impl Action {
         &self,
         sc: &mut SerializeContext,
         mut action: pdf_writer::writers::Action,
+        location: Option<Location>,
     ) -> KrillaResult<()> {
         match self {
             Action::Link(link) => {
@@ -41,6 +44,8 @@ impl Action {
             }
             Action::ResetForm(reset_form) => {
                 reset_form.serialize(action);
+
+                sc.register_validation_error(ValidationError::ContainsMutatingAction(location));
 
                 Ok(())
             }

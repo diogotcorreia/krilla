@@ -143,7 +143,9 @@ impl AnnotationType {
         location: Option<Location>,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
         match self {
-            AnnotationType::Link(l) => l.serialize_type(sc, chunk_container, root_ref, page_height),
+            AnnotationType::Link(l) => {
+                l.serialize_type(sc, chunk_container, root_ref, page_height, location)
+            }
             AnnotationType::Widget(w) => {
                 w.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
@@ -253,6 +255,7 @@ impl LinkAnnotation {
         chunk_container: &'a mut ChunkContainer,
         root_ref: Ref,
         page_height: f32,
+        location: Option<Location>,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
         let chunk = &mut chunk_container.non_stream.annotations;
         let mut annotation = chunk
@@ -303,7 +306,7 @@ impl LinkAnnotation {
             Target::Destination(destination) => {
                 destination.serialize(sc, annotation.insert(Name(b"Dest")))?
             }
-            Target::Action(action) => action.serialize(sc, annotation.action())?,
+            Target::Action(action) => action.serialize(sc, annotation.action(), location)?,
         }
 
         // Only set the print flag when really necessary (only PDF/A). Don't
@@ -563,7 +566,12 @@ impl<T: SerializableAppearance> WidgetAnnotation<T> {
         annotation.rect(actual_rect.to_pdf_rect());
 
         if let Some(action) = &self.action {
-            action.serialize(sc, annotation.additional_actions().annot_mouse_press())?;
+            sc.register_validation_error(ValidationError::ContainsAdditionalActions(location));
+            action.serialize(
+                sc,
+                annotation.additional_actions().annot_mouse_press(),
+                location,
+            )?;
         }
 
         annotation.flags(AnnotationFlags::PRINT);
