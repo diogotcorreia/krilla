@@ -288,6 +288,69 @@ fn validate_pdfa1b_transparency_with_location() {
     )
 }
 
+#[test]
+fn validate_pdf_a_annotation_has_conditional_appearance() {
+    let mut document = pdfa_document();
+    let mut page = document.start_page();
+
+    let mut surface = page.surface();
+    let button_appearance_normal = square_stream(surface.stream_builder(), red_fill(1.0));
+    let button_appearance_alt = square_stream(surface.stream_builder(), blue_fill(1.0));
+    surface.finish();
+
+    let field_loc = loc(1);
+    let mut button = FormField::push_button("button".to_string())
+        .with_location(Some(field_loc))
+        .with_alt_name("A button".to_string());
+
+    let annot1_loc = {
+        let annot_loc = loc(2);
+        let annot = Annotation::new_widget(
+            button
+                .new_widget(
+                    Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
+                    button_appearance_normal.clone(),
+                )
+                .with_rollover_appearance(button_appearance_alt.clone()),
+            Some("A button".to_string()),
+        )
+        .with_location(Some(annot_loc));
+        page.add_widget_annotation(&mut button, annot);
+
+        annot_loc
+    };
+    let annot2_loc = {
+        let annot_loc = loc(3);
+        let annot = Annotation::new_widget(
+            button
+                .new_widget(
+                    Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
+                    button_appearance_normal,
+                )
+                .with_down_appearance(button_appearance_alt),
+            Some("A button".to_string()),
+        )
+        .with_location(Some(annot_loc));
+        page.add_widget_annotation(&mut button, annot);
+
+        annot_loc
+    };
+
+    page.finish();
+
+    let mut field_tree = FieldTree::new();
+    field_tree.push(button);
+    document.set_field_tree(field_tree);
+
+    assert_eq!(
+        validation_errors(document.finish()),
+        vec![
+            ValidationError::AnnotationHasConditionalAppearance(Some(annot1_loc)),
+            ValidationError::AnnotationHasConditionalAppearance(Some(annot2_loc))
+        ]
+    )
+}
+
 fn validate_pdf_full_example(document: &mut Document) {
     let mut page = document.start_page();
     let mut surface = page.surface();

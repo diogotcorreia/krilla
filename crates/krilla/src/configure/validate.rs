@@ -137,6 +137,8 @@ pub enum ValidationError {
     EmbeddedFile(EmbedError, Option<Location>),
     /// The PDF contains no tagging.
     MissingTagging,
+    /// The PDF contains an annotation with a rollover or down appearance.
+    AnnotationHasConditionalAppearance(Option<Location>),
     /// The PDF contains another embedded PDF.
     ///
     /// This is currently forbidden in validated export because we cannot manually verify
@@ -550,6 +552,7 @@ impl Archival {
                 | ValidationError::Transparency(_)
                 | ValidationError::ImageInterpolation(_)
                 | ValidationError::EmbeddedFile(EmbedError::Existence, _)
+                | ValidationError::AnnotationHasConditionalAppearance(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-1 profiles.
@@ -595,6 +598,7 @@ impl Archival {
                 | ValidationError::RestrictedLicense(_)
                 | ValidationError::MissingDocumentDate
                 | ValidationError::ImageInterpolation(_)
+                | ValidationError::AnnotationHasConditionalAppearance(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-2 and PDF/A-3 profiles.
@@ -660,6 +664,7 @@ impl Archival {
                 | ValidationError::RestrictedLicense(_)
                 | ValidationError::MissingDocumentDate
                 | ValidationError::ImageInterpolation(_)
+                | ValidationError::AnnotationHasConditionalAppearance(_)
                 | ValidationError::EmbeddedPDF(_),
             ) => true,
             // Allowed under all PDF/A-4 profiles.
@@ -1140,6 +1145,7 @@ impl Accessibility {
                     EmbedError::Existence | EmbedError::MissingDate | EmbedError::MissingMimeType,
                     _,
                 )
+                | ValidationError::AnnotationHasConditionalAppearance(_)
                 | ValidationError::MissingDocumentDate,
             ) => false,
         }

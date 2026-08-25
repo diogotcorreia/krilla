@@ -99,9 +99,13 @@ impl Annotation {
         root_ref: Ref,
         page_height: f32,
     ) -> KrillaResult<()> {
-        let mut annotation =
-            self.annotation_type
-                .serialize_type(sc, chunk_container, root_ref, page_height)?;
+        let mut annotation = self.annotation_type.serialize_type(
+            sc,
+            chunk_container,
+            root_ref,
+            page_height,
+            self.location,
+        )?;
 
         if let Some(struct_parent) = self.struct_parent {
             annotation.struct_parent(struct_parent);
@@ -136,11 +140,12 @@ impl AnnotationType {
         chunk_container: &'a mut ChunkContainer,
         root_ref: Ref,
         page_height: f32,
+        location: Option<Location>,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
         match self {
             AnnotationType::Link(l) => l.serialize_type(sc, chunk_container, root_ref, page_height),
             AnnotationType::Widget(w) => {
-                w.serialize_type(sc, chunk_container, root_ref, page_height)
+                w.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
         }
     }
@@ -539,10 +544,11 @@ impl<T: SerializableAppearance> WidgetAnnotation<T> {
         chunk_container: &'a mut ChunkContainer,
         root_ref: Ref,
         page_height: f32,
+        location: Option<Location>,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
-        let appearance_refs = self
-            .appearance
-            .register_refs(sc, chunk_container, self.rect);
+        let appearance_refs =
+            self.appearance
+                .register_refs(sc, chunk_container, self.rect, location);
 
         let chunk = &mut chunk_container.non_stream.annotations;
         let mut annotation = chunk
@@ -598,16 +604,17 @@ impl WidgetAnnotationKind {
         chunk_container: &'a mut ChunkContainer,
         root_ref: Ref,
         page_height: f32,
+        location: Option<Location>,
     ) -> KrillaResult<pdf_writer::writers::Annotation<'a>> {
         match self {
             WidgetAnnotationKind::Simple(a) => {
-                a.serialize_type(sc, chunk_container, root_ref, page_height)
+                a.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
             WidgetAnnotationKind::Named(a) => {
-                a.serialize_type(sc, chunk_container, root_ref, page_height)
+                a.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
             WidgetAnnotationKind::DualState(a) => {
-                a.serialize_type(sc, chunk_container, root_ref, page_height)
+                a.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
         }
     }
@@ -621,6 +628,7 @@ trait SerializableAppearance {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         rect: Rect,
+        location: Option<Location>,
     ) -> Self::RefsHolder;
 
     fn serialize_appearance(
@@ -706,7 +714,14 @@ impl SerializableAppearance for SimpleAppearanceStream {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         rect: Rect,
+        location: Option<Location>,
     ) -> Self::RefsHolder {
+        if self.rollover.is_some() || self.down.is_some() {
+            sc.register_validation_error(ValidationError::AnnotationHasConditionalAppearance(
+                location,
+            ));
+        }
+
         let normal_ref = register_appearance_entry(sc, chunk_container, self.normal, rect);
         let rollover_ref = self
             .rollover
@@ -745,8 +760,11 @@ impl SerializableAppearance for NamedAppearanceStream {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         rect: Rect,
+        location: Option<Location>,
     ) -> Self::RefsHolder {
-        let refs = self.appearance.register_refs(sc, chunk_container, rect);
+        let refs = self
+            .appearance
+            .register_refs(sc, chunk_container, rect, location);
 
         Self::RefsHolder {
             name: self.name,
@@ -781,9 +799,10 @@ impl SerializableAppearance for DualStateAppearanceStream {
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         rect: Rect,
+        location: Option<Location>,
     ) -> Self::RefsHolder {
-        let off = self.off.register_refs(sc, chunk_container, rect);
-        let on = self.on.register_refs(sc, chunk_container, rect);
+        let off = self.off.register_refs(sc, chunk_container, rect, location);
+        let on = self.on.register_refs(sc, chunk_container, rect, location);
 
         Self::RefsHolder {
             value: self.value,
