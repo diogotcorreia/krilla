@@ -8,13 +8,15 @@
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
-    annotation::{DualStateAppearance, SimpleAppearance, WidgetAnnotation},
+    annotation::{DualStateAppearanceStream, NamedAppearanceStream, WidgetAnnotation},
     chunk_container::ChunkContainer,
-    configure::PdfVersion,
+    configure::{PdfVersion, ValidationError},
+    form::kind::{Checkbox, Radio},
     geom::Rect,
     resource::ResourceDictionaryBuilder,
     serialize::SerializeContext,
     stream::Stream,
+    surface::Location,
     tagging::AnnotationIdentifier,
 };
 
@@ -64,6 +66,18 @@ pub struct FieldTree {
     pub fields: Vec<Node>,
 }
 
+impl FieldTree {
+    /// Create a new field tree.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Append a new child to the field tree.
+    pub fn push(&mut self, node: impl Into<Node>) {
+        self.fields.push(node.into());
+    }
+}
+
 /// A field group.
 pub struct FieldGroup {
     /// The name of the field group.
@@ -74,6 +88,19 @@ pub struct FieldGroup {
 }
 
 impl FieldGroup {
+    /// Create a new field group with the given name.
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            fields: vec![],
+        }
+    }
+
+    /// Append a new child to the field group.
+    pub fn push(&mut self, node: impl Into<Node>) {
+        self.fields.push(node.into());
+    }
+
     fn serialize_group(
         &self,
         sc: &mut SerializeContext,
@@ -208,14 +235,29 @@ pub struct FormField<T> {
     pub(crate) identifier: Option<Ref>,
     pub(crate) annotations: Vec<AnnotationIdentifier>,
     kind: T,
+    location: Option<Location>,
 }
 
 impl<T> FormField<T> {
     /// Set the alternative name of the field.
     /// This is used to refer to this field in the user interface,
     /// as well as for accessibility purposes.
+    ///
+    /// Note that the alt name might be required in some cases, for example
+    /// when exporting to PDF/UA.
     pub fn set_alt_name(&mut self, alt_name: String) {
         self.alt_name = Some(alt_name);
+    }
+
+    /// Set the alternative name of the field.
+    /// This is used to refer to this field in the user interface,
+    /// as well as for accessibility purposes.
+    ///
+    /// Note that the alt name might be required in some cases, for example
+    /// when exporting to PDF/UA.
+    pub fn with_alt_name(mut self, alt_name: String) -> Self {
+        self.set_alt_name(alt_name);
+        self
     }
 
     /// Set the mapping name of the field.
@@ -224,9 +266,22 @@ impl<T> FormField<T> {
         self.mapping_name = Some(mapping_name);
     }
 
+    /// Set the mapping name of the field.
+    /// This is used during submission/export.
+    pub fn with_mapping_name(mut self, mapping_name: String) -> Self {
+        self.set_mapping_name(mapping_name);
+        self
+    }
+
     /// Set whether the field is read-only. Default: `false`.
     pub fn set_read_only(&mut self, read_only: bool) {
         self.flags.set(FieldFlags::READ_ONLY, read_only);
+    }
+
+    /// Set whether the field is read-only. Default: `false`.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.set_read_only(read_only);
+        self
     }
 
     /// Set whether the field is required. Default: `false`.
@@ -234,9 +289,32 @@ impl<T> FormField<T> {
         self.flags.set(FieldFlags::REQUIRED, required);
     }
 
+    /// Set whether the field is required. Default: `false`.
+    pub fn with_required(mut self, required: bool) -> Self {
+        self.set_required(required);
+        self
+    }
+
     /// Set whether the field will be exported during submission. Default: `true`.
     pub fn set_export(&mut self, export: bool) {
         self.flags.set(FieldFlags::NO_EXPORT, !export);
+    }
+
+    /// Set whether the field will be exported during submission. Default: `true`.
+    pub fn with_export(mut self, export: bool) -> Self {
+        self.set_export(export);
+        self
+    }
+
+    /// Set the location of the field.
+    pub fn set_location(&mut self, location: Option<Location>) {
+        self.location = location;
+    }
+
+    /// Set the location of the field.
+    pub fn with_location(mut self, location: Option<Location>) -> Self {
+        self.set_location(location);
+        self
     }
 }
 
@@ -256,30 +334,39 @@ impl FormField<kind::PushButton> {
     ///
     /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
     /// - `appearance`: The appearance of the widget annotation.
-    pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
-        WidgetAnnotation::simple(rect, appearance)
+    pub fn new_widget(
+        &self,
+        rect: Rect,
+        appearance: Stream,
+    ) -> WidgetAnnotation<NamedAppearanceStream> {
+        WidgetAnnotation::named(rect, "Yes".to_string(), appearance)
     }
 }
 
 impl FormField<kind::Checkbox> {
     /// Create a checkbox field.
     /// The field name must not contain any period character (`.`).
-    pub fn checkbox(name: String) -> Self {
+    pub fn checkbox(name: String, checked: bool) -> Self {
         debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
+            kind: Checkbox {
+                checked,
+                ..Default::default()
+            },
             ..Default::default()
         }
-    }
-
-    /// Set whether this checkbox is checked.
-    pub fn set_checked(&mut self, checked: bool) {
-        self.kind.checked = Some(checked);
     }
 
     /// Set whether this checkbox is checked by default.
     pub fn set_default_checked(&mut self, checked: bool) {
         self.kind.default_checked = Some(checked);
+    }
+
+    /// Set whether this checkbox is checked by default.
+    pub fn with_default_checked(mut self, checked: bool) -> Self {
+        self.set_default_checked(checked);
+        self
     }
 
     /// Create a widget annotation for the checkbox field.
@@ -292,9 +379,10 @@ impl FormField<kind::Checkbox> {
         rect: Rect,
         off_appearance: Stream,
         on_appearance: Stream,
-    ) -> WidgetAnnotation<DualStateAppearance> {
+    ) -> WidgetAnnotation<DualStateAppearanceStream> {
         WidgetAnnotation::dual(
             rect,
+            self.kind.checked,
             "Off".to_string(),
             off_appearance,
             "Yes".to_string(),
@@ -306,27 +394,33 @@ impl FormField<kind::Checkbox> {
 impl FormField<kind::Radio> {
     /// Create a radio group field.
     /// The field name must not contain any period character (`.`).
-    pub fn radio(name: String) -> Self {
+    /// If the provided value is None, no option is selected.
+    pub fn radio(name: String, value: Option<String>) -> Self {
         debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
             name,
             flags: FieldFlags::RADIO,
+            kind: Radio {
+                value,
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
 
-    /// Set the value of the radio group.
+    /// Set the default value of the radio group.
     /// It should correspond to a value of one of the annotations.
-    // TODO: take Option<String> instead?
-    pub fn set_value(&mut self, value: String) {
-        self.kind.value = Some(value);
+    /// If the provided value is None, no option is selected.
+    pub fn set_default_value(&mut self, value: Option<String>) {
+        self.kind.default_value = value;
     }
 
     /// Set the default value of the radio group.
     /// It should correspond to a value of one of the annotations.
-    // TODO: take Option<String> instead?
-    pub fn set_default_value(&mut self, value: String) {
-        self.kind.default_value = Some(value);
+    /// If the provided value is None, no option is selected.
+    pub fn with_default_value(mut self, value: Option<String>) -> Self {
+        self.set_default_value(value);
+        self
     }
 
     /// Set whether to allow unselecting all buttons of this radio group.
@@ -335,10 +429,24 @@ impl FormField<kind::Radio> {
         self.flags.set(FieldFlags::NO_TOGGLE_TO_OFF, !allow_off);
     }
 
+    /// Set whether to allow unselecting all buttons of this radio group.
+    /// Default: true
+    pub fn with_allow_toggling_off(mut self, allow_off: bool) -> Self {
+        self.set_allow_toggling_off(allow_off);
+        self
+    }
+
     /// Set whether to toggle on all buttons with the same value simultaneously.
     /// Default: false
     pub fn set_radios_in_unison(&mut self, in_unison: bool) {
         self.flags.set(FieldFlags::RADIOS_IN_UNISON, in_unison);
+    }
+
+    /// Set whether to toggle on all buttons with the same value simultaneously.
+    /// Default: false
+    pub fn with_radios_in_unison(mut self, in_unison: bool) -> Self {
+        self.set_radios_in_unison(in_unison);
+        self
     }
 
     /// Create a widget annotation for the radio group field.
@@ -353,9 +461,10 @@ impl FormField<kind::Radio> {
         value: String,
         off_appearance: Stream,
         on_appearance: Stream,
-    ) -> WidgetAnnotation<DualStateAppearance> {
+    ) -> WidgetAnnotation<DualStateAppearanceStream> {
         WidgetAnnotation::dual(
             rect,
+            self.kind.value.as_ref() == Some(&value),
             "Off".to_string(),
             off_appearance,
             value,
@@ -411,6 +520,9 @@ impl<T: SerializableField> FormField<T> {
         if let Some(alt_name) = &self.alt_name {
             field.alternate_name(TextStr(alt_name));
         }
+        if self.alt_name.as_ref().is_none_or(String::is_empty) {
+            sc.register_validation_error(ValidationError::MissingFieldAltName(self.location));
+        }
 
         if let Some(mapping_name) = &self.mapping_name {
             field.mapping_name(TextStr(mapping_name));
@@ -457,13 +569,13 @@ pub mod kind {
     /// Create a field of this type via [`FormField::checkbox`](super::FormField::checkbox).
     #[derive(Debug, Clone, Default)]
     pub struct Checkbox {
-        pub(super) checked: Option<bool>,
+        pub(super) checked: bool,
         pub(super) default_checked: Option<bool>,
     }
 
     impl SerializableField for Checkbox {
         fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
-            let value = if self.checked.unwrap_or(false) {
+            let value = if self.checked {
                 CheckBoxState::Yes
             } else {
                 CheckBoxState::Off

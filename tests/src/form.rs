@@ -1,6 +1,6 @@
 use krilla::action::ResetFormAction;
-use krilla::forms::kind::PushButton;
-use krilla::forms::{FieldGroup, FieldTree, FormField};
+use krilla::form::kind::PushButton;
+use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::Rect;
 use krilla::page::PageSettings;
 use krilla::paint::Fill;
@@ -9,15 +9,15 @@ use krilla::surface::Surface;
 use krilla::Document;
 use krilla_macros::snapshot;
 
-use crate::{blue_fill, green_fill, rect_to_path, red_fill};
+use crate::{blue_fill, green_fill, rect_to_path, red_fill, square_stream};
 
 #[snapshot(document)]
 fn forms_push_button(d: &mut Document) {
     let mut page = d.start_page_with(PageSettings::from_wh(200.0, 200.0).unwrap());
 
     let mut surface = page.surface();
-    let button_appearance = square_stream(&mut surface, red_fill(1.0));
-    let button_hover_appearance = square_stream(&mut surface, green_fill(1.0));
+    let button_appearance = square_stream(surface.stream_builder(), red_fill(1.0));
+    let button_hover_appearance = square_stream(surface.stream_builder(), green_fill(1.0));
     surface.finish();
 
     let mut button = FormField::push_button("btn1".to_string());
@@ -42,14 +42,14 @@ fn forms_checkbox(d: &mut Document) {
 
     let mut surface = page.surface();
 
-    let on_appearance = square_stream(&mut surface, green_fill(1.0));
-    let off_appearance = square_stream(&mut surface, red_fill(1.0));
+    let on_appearance = square_stream(surface.stream_builder(), green_fill(1.0));
+    let off_appearance = square_stream(surface.stream_builder(), red_fill(1.0));
     surface.finish();
 
-    let mut checkbox = FormField::checkbox("checkbox1".to_string());
+    let mut checkbox = FormField::checkbox("checkbox1".to_string(), true);
     checkbox.set_alt_name("A checkbox".to_string());
     checkbox.set_mapping_name("chx1".to_string());
-    checkbox.set_default_checked(true);
+    checkbox.set_default_checked(false);
 
     let checkbox_widget = checkbox.new_widget(
         Rect::from_xywh(50.0, 0.0, 10.0, 10.0).unwrap(),
@@ -72,11 +72,11 @@ fn forms_radio_group(d: &mut Document) {
 
     let mut surface = page.surface();
 
-    let on_appearance = square_stream(&mut surface, green_fill(1.0));
-    let off_appearance = square_stream(&mut surface, red_fill(1.0));
+    let on_appearance = square_stream(surface.stream_builder(), green_fill(1.0));
+    let off_appearance = square_stream(surface.stream_builder(), red_fill(1.0));
     surface.finish();
 
-    let mut radio_group = FormField::radio("radio1".to_string());
+    let mut radio_group = FormField::radio("radio1".to_string(), Some("option1".to_string()));
     radio_group.set_required(true);
     radio_group.set_export(false);
     radio_group.set_radios_in_unison(true);
@@ -119,12 +119,12 @@ fn forms_reset_action(d: &mut Document) {
     let mut page = d.start_page_with(PageSettings::from_wh(200.0, 200.0).unwrap());
 
     let mut surface = page.surface();
-    let on_appearance = square_stream(&mut surface, green_fill(1.0));
-    let off_appearance = square_stream(&mut surface, red_fill(1.0));
-    let button_appearance = square_stream(&mut surface, blue_fill(1.0));
+    let on_appearance = square_stream(surface.stream_builder(), green_fill(1.0));
+    let off_appearance = square_stream(surface.stream_builder(), red_fill(1.0));
+    let button_appearance = square_stream(surface.stream_builder(), blue_fill(1.0));
     surface.finish();
 
-    let mut checkbox_1 = FormField::checkbox("checkbox1".to_string());
+    let mut checkbox_1 = FormField::checkbox("checkbox1".to_string(), false);
     checkbox_1.set_default_checked(true);
     let checkbox_1_widget = checkbox_1.new_widget(
         Rect::from_xywh(20.0, 0.0, 10.0, 10.0).unwrap(),
@@ -132,7 +132,7 @@ fn forms_reset_action(d: &mut Document) {
         on_appearance.clone(),
     );
 
-    let mut checkbox_2 = FormField::checkbox("checkbox2".to_string());
+    let mut checkbox_2 = FormField::checkbox("checkbox2".to_string(), false);
     checkbox_2.set_default_checked(false);
     let checkbox_2_widget = checkbox_2.new_widget(
         Rect::from_xywh(30.0, 0.0, 10.0, 10.0).unwrap(),
@@ -176,14 +176,4 @@ fn forms_reset_action(d: &mut Document) {
             reset_button_2.into(),
         ],
     });
-}
-
-fn square_stream(surface: &mut Surface, fill: Fill) -> Stream {
-    let mut builder = surface.stream_builder();
-    let mut stream_surface = builder.surface();
-    stream_surface.set_fill(Some(fill));
-    stream_surface.draw_path(&rect_to_path(0.0, 0.0, 10.0, 10.0));
-    stream_surface.finish();
-
-    builder.finish()
 }
