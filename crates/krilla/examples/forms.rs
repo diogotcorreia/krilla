@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use krilla::action::ResetFormAction;
 use krilla::color::rgb;
+use krilla::form::variable_text::VariableAppearance;
 use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::{PathBuilder, Point, Rect};
 use krilla::page::PageSettings;
@@ -211,10 +212,23 @@ fn main() {
     // Create a widget annotation (visual representation) for the push button.
     let mut reset_button_widget = reset_button.new_widget(
         Rect::from_xywh(40.0, 120.0, 40.0, 20.0).unwrap(),
-        button_appearance,
+        button_appearance.clone(),
     );
+
     // Set an on click action (reset all fields).
     reset_button_widget.set_action_mouse_press(ResetFormAction::All.into());
+
+    let mut text_field = FormField::text("test".to_string());
+
+    text_field.set_appearance(VariableAppearance {
+        font,
+        font_size: 10.0,
+    });
+
+    let text_widget = text_field.new_widget(
+        Rect::from_xywh(40.0, 150.0, 40.0, 20.0).unwrap(),
+        button_appearance.clone(),
+    );
 
     // Finish the surface.
     surface.finish();
@@ -224,6 +238,7 @@ fn main() {
     page.add_widget_annotation(&mut radio_group, radio_option_1.into());
     page.add_widget_annotation(&mut radio_group, radio_option_2.into());
     page.add_widget_annotation(&mut reset_button, reset_button_widget.into());
+    page.add_widget_annotation(&mut text_field, text_widget.into());
 
     // Finish the page.
     page.finish();
@@ -233,6 +248,7 @@ fn main() {
         fields: vec![
             checkbox.into(),
             radio_group.into(),
+            text_field.into(),
             // Fields can be grouped arbitrarily.
             FieldGroup {
                 name: "actions".to_string(),

@@ -8,10 +8,15 @@
 use pdf_writer::{types::FieldFlags, writers::Form, Finish, Ref, TextStr};
 
 use crate::{
-    annotation::{DualStateAppearanceStream, NamedAppearanceStream, WidgetAnnotation},
+    annotation::{
+        DualStateAppearanceStream, NamedAppearanceStream, SimpleAppearanceStream, WidgetAnnotation,
+    },
     chunk_container::ChunkContainer,
     configure::{PdfVersion, ValidationError},
-    form::kind::{Checkbox, Radio},
+    form::{
+        kind::{Checkbox, Radio},
+        variable_text::VariableAppearance,
+    },
     geom::Rect,
     resource::ResourceDictionaryBuilder,
     serialize::SerializeContext,
@@ -26,8 +31,12 @@ pub(crate) struct AcroForm {
 }
 
 impl AcroForm {
+    pub(crate) fn prepare_for_serialization(&mut self, sc: &mut SerializeContext) {
+        self.field_tree.visit(sc, &mut self.rd_builder);
+    }
+
     pub(crate) fn serialize(
-        &self,
+        self,
         sc: &mut SerializeContext,
         chunk_container: &mut ChunkContainer,
         root_ref: Ref,
@@ -43,6 +52,12 @@ impl AcroForm {
 
             form.fields(fields);
         }
+
+        self.rd_builder.finish().to_pdf_resources(
+            &mut form,
+            sc,
+            &mut chunk_container.non_stream.resource_dictionaries,
+        );
 
         form.finish();
 
@@ -490,7 +505,15 @@ impl FormField<kind::Text> {
         self.kind.default_value = Some(value);
     }
 
-    pub fn new_widget(&self, rect: Rect, appearance: Stream) -> WidgetAnnotation<SimpleAppearance> {
+    pub fn set_appearance(&mut self, appearance: VariableAppearance) {
+        self.kind.appearance = Some(appearance);
+    }
+
+    pub fn new_widget(
+        &self,
+        rect: Rect,
+        appearance: Stream,
+    ) -> WidgetAnnotation<SimpleAppearanceStream> {
         WidgetAnnotation::simple(rect, appearance)
     }
 }
@@ -548,8 +571,8 @@ pub(crate) trait SerializableField {
 
 /// Field kind structs.
 pub mod kind {
-    use pdf_writer::TextStr;
     use pdf_writer::{types::CheckBoxState, Name};
+    use pdf_writer::{Buf, TextStr};
 
     use super::variable_text::VariableAppearance;
     use super::SerializableField;
@@ -625,6 +648,7 @@ pub mod kind {
     #[derive(Debug, Clone, Default)]
     pub struct Text {
         pub(super) appearance: Option<VariableAppearance>,
+        pub(super) appearance_buf: Option<Buf>,
         pub(super) value: Option<String>,
         pub(super) default_value: Option<String>,
     }
@@ -638,6 +662,13 @@ pub mod kind {
             if let Some(value) = &self.default_value {
                 field.text_default_value(TextStr(value));
             }
+
+            let buf = self
+                .appearance_buf
+                .as_ref()
+                .expect("text field must have its default appearance field set");
+            let str = pdf_writer::Str(buf);
+            field.vartext_default_appearance(str);
         }
     }
 }
@@ -645,9 +676,14 @@ pub mod kind {
 #[allow(missing_docs)]
 pub mod variable_text {
     use pdf_writer::Buf;
+    use skrifa::MetadataProvider;
 
     use crate::{
-        chunk_container::ChunkContainer, serialize::SerializeContext, text::Font, util::NameExt,
+        color::rgb,
+        resource::ResourceDictionaryBuilder,
+        serialize::SerializeContext,
+        text::{type3::ColoredGlyph, Font, GlyphId},
+        util::NameExt,
     };
 
     #[derive(Debug, Clone)]
@@ -660,15 +696,88 @@ pub mod variable_text {
         pub(super) fn serialize(
             &self,
             sc: &mut SerializeContext,
-            chunk_container: &mut ChunkContainer,
+            rd_builder: &mut ResourceDictionaryBuilder,
         ) -> Buf {
-            // TODO: somehow register the font
-            let font_name: String = todo!();
+            // TODO: properly embed the entire font
+            let container = sc.register_font_container(self.font.clone());
+            for (codepoint, glyph) in self.font.font_ref().charmap().mappings() {
+                let glyph = ColoredGlyph::new(GlyphId::new(glyph.to_u32()), rgb::Color::black());
+                let (font_identifier, pdf_glyph) = container.borrow_mut().add_glyph(glyph);
+                let char = char::from_u32(codepoint).unwrap().to_string();
+                container
+                    .borrow_mut()
+                    .get_from_identifier_mut(font_identifier)
+                    .unwrap()
+                    .set_codepoints(pdf_glyph, char, None);
+            }
+            let identifier = container.borrow().cid_font().identifier();
+            let font_name = sc.register_font_identifier(identifier);
+            let font_name = rd_builder.register_resource(font_name);
 
             let mut content = sc.new_content();
             content.set_font(font_name.to_pdf_name(), self.font_size);
 
             content.finish()
         }
+    }
+}
+
+// Visit all fields in a field tree
+// Used to pre-process variable text fields.
+trait Visit {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder);
+}
+
+impl Visit for FieldTree {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        self.fields.visit(sc, rd_builder);
+    }
+}
+
+impl Visit for Node {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        match self {
+            Node::Group(field_group) => field_group.visit(sc, rd_builder),
+            Node::Leaf(field_kind) => field_kind.visit(sc, rd_builder),
+        }
+    }
+}
+
+impl Visit for FieldGroup {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        self.fields.visit(sc, rd_builder);
+    }
+}
+
+impl Visit for FieldKind {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        #[allow(clippy::single_match)]
+        match self {
+            FieldKind::Text(form_field) => form_field.visit(sc, rd_builder),
+            _ => {}
+        }
+    }
+}
+
+impl Visit for FormField<kind::Text> {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        if let Some(ap) = &self.kind.appearance {
+            let buf = ap.serialize(sc, rd_builder);
+            self.kind.appearance_buf = Some(buf);
+        }
+    }
+}
+
+impl<T: Visit> Visit for Option<T> {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        if let Some(t) = self {
+            t.visit(sc, rd_builder);
+        }
+    }
+}
+
+impl<T: Visit> Visit for Vec<T> {
+    fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
+        self.iter_mut().for_each(|item| item.visit(sc, rd_builder));
     }
 }
