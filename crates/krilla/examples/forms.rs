@@ -213,8 +213,11 @@ fn main() {
         Rect::from_xywh(40.0, 120.0, 40.0, 20.0).unwrap(),
         button_appearance,
     );
-    // Set an on click action (reset all fields).
-    reset_button_widget.set_action_mouse_press(ResetFormAction::All.into());
+    // Set an on click action (reset all fields except for button itself).
+    // Some PDF readers erase the button's appearance if it is reset, making it invisible.
+    reset_button_widget.set_action_mouse_press(
+        ResetFormAction::Exclude(vec!["actions.reset-button".into()]).into(),
+    );
 
     // Finish the surface.
     surface.finish();
