@@ -215,8 +215,11 @@ fn main() {
         button_appearance.clone(),
     );
 
-    // Set an on click action (reset all fields).
-    reset_button_widget.set_action_mouse_press(ResetFormAction::All.into());
+    // Set an on click action (reset all fields except for button itself).
+    // Some PDF readers erase the button's appearance if it is reset, making it invisible.
+    reset_button_widget.set_action_mouse_press(
+        ResetFormAction::Exclude(vec!["actions.reset-button".into()]).into(),
+    );
 
     let mut text_field = FormField::text("test".to_string());
 
