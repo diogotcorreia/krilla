@@ -15,7 +15,7 @@ use crate::{
     configure::{PdfVersion, ValidationError},
     form::{
         kind::{Checkbox, Radio},
-        variable_text::VariableAppearance,
+        variable_text::{TextAlignment, VariableAppearance},
     },
     geom::Rect,
     resource::ResourceDictionaryBuilder,
@@ -509,6 +509,10 @@ impl FormField<kind::Text> {
         self.kind.appearance = Some(appearance);
     }
 
+    pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
+        self.kind.text_alignment = alignment;
+    }
+
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -574,7 +578,7 @@ pub mod kind {
     use pdf_writer::{types::CheckBoxState, Name};
     use pdf_writer::{Buf, TextStr};
 
-    use super::variable_text::VariableAppearance;
+    use super::variable_text::{TextAlignment, VariableAppearance};
     use super::SerializableField;
 
     /// A push button.
@@ -651,6 +655,7 @@ pub mod kind {
         pub(super) appearance_buf: Option<Buf>,
         pub(super) value: Option<String>,
         pub(super) default_value: Option<String>,
+        pub(super) text_alignment: TextAlignment,
     }
 
     impl SerializableField for Text {
@@ -661,6 +666,10 @@ pub mod kind {
             }
             if let Some(value) = &self.default_value {
                 field.text_default_value(TextStr(value));
+            }
+
+            if self.text_alignment != TextAlignment::default() {
+                field.vartext_quadding(self.text_alignment.into());
             }
 
             let buf = self
@@ -675,7 +684,7 @@ pub mod kind {
 
 #[allow(missing_docs)]
 pub mod variable_text {
-    use pdf_writer::Buf;
+    use pdf_writer::{types::Quadding, Buf};
     use skrifa::MetadataProvider;
 
     use crate::{
@@ -735,6 +744,24 @@ pub mod variable_text {
     pub enum FormFont {
         Embedded(Font),
         Standard(StandardFont),
+    }
+
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub enum TextAlignment {
+        #[default]
+        Left,
+        Center,
+        Right,
+    }
+
+    impl From<TextAlignment> for Quadding {
+        fn from(value: TextAlignment) -> Self {
+            match value {
+                TextAlignment::Left => Self::Left,
+                TextAlignment::Center => Self::Center,
+                TextAlignment::Right => Self::Right,
+            }
+        }
     }
 }
 

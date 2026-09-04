@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use krilla::action::ResetFormAction;
 use krilla::color::rgb;
-use krilla::form::variable_text::{FormFont, VariableAppearance};
+use krilla::form::variable_text::{FormFont, TextAlignment, VariableAppearance};
 use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::{PathBuilder, Point, Rect};
 use krilla::page::PageSettings;
@@ -228,6 +228,8 @@ fn main() {
         font: FormFont::Standard(StandardFont::Helvetica),
         font_size: 10.0,
     });
+
+    text_field.set_text_alignment(TextAlignment::Center);
 
     let text_appearance = {
         let mut builder = surface.stream_builder();
