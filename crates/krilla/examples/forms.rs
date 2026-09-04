@@ -5,12 +5,13 @@ use std::path::PathBuf;
 
 use krilla::action::ResetFormAction;
 use krilla::color::rgb;
-use krilla::form::variable_text::VariableAppearance;
+use krilla::form::variable_text::{FormFont, VariableAppearance};
 use krilla::form::{FieldGroup, FieldTree, FormField};
 use krilla::geom::{PathBuilder, Point, Rect};
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};
 use krilla::text::Font;
+use krilla::text::StandardFont;
 use krilla::text::TextDirection;
 use krilla::Document;
 
@@ -212,7 +213,7 @@ fn main() {
     // Create a widget annotation (visual representation) for the push button.
     let mut reset_button_widget = reset_button.new_widget(
         Rect::from_xywh(40.0, 120.0, 40.0, 20.0).unwrap(),
-        button_appearance.clone(),
+        button_appearance,
     );
 
     // Set an on click action (reset all fields except for button itself).
@@ -224,13 +225,32 @@ fn main() {
     let mut text_field = FormField::text("test".to_string());
 
     text_field.set_appearance(VariableAppearance {
-        font,
+        font: FormFont::Standard(StandardFont::Helvetica),
         font_size: 10.0,
     });
 
+    let text_appearance = {
+        let mut builder = surface.stream_builder();
+        let mut surface = builder.surface();
+
+        // surface.draw_text(
+        //     Point::from_xy(0.0, 5.0),
+        //     font.clone(),
+        //     3.0,
+        //     "Text:",
+        //     false,
+        //     TextDirection::Auto,
+        // );
+
+        surface.insert_variable_text();
+
+        surface.finish();
+        builder.finish()
+    };
+
     let text_widget = text_field.new_widget(
         Rect::from_xywh(40.0, 150.0, 40.0, 20.0).unwrap(),
-        button_appearance.clone(),
+        text_appearance,
     );
 
     // Finish the surface.

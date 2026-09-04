@@ -682,13 +682,13 @@ pub mod variable_text {
         color::rgb,
         resource::ResourceDictionaryBuilder,
         serialize::SerializeContext,
-        text::{type3::ColoredGlyph, Font, GlyphId},
+        text::{type3::ColoredGlyph, Font, GlyphId, StandardFont},
         util::NameExt,
     };
 
     #[derive(Debug, Clone)]
     pub struct VariableAppearance {
-        pub font: Font,
+        pub font: FormFont,
         pub font_size: f32,
     }
 
@@ -699,18 +699,28 @@ pub mod variable_text {
             rd_builder: &mut ResourceDictionaryBuilder,
         ) -> Buf {
             // TODO: properly embed the entire font
-            let container = sc.register_font_container(self.font.clone());
-            for (codepoint, glyph) in self.font.font_ref().charmap().mappings() {
-                let glyph = ColoredGlyph::new(GlyphId::new(glyph.to_u32()), rgb::Color::black());
-                let (font_identifier, pdf_glyph) = container.borrow_mut().add_glyph(glyph);
-                let char = char::from_u32(codepoint).unwrap().to_string();
-                container
-                    .borrow_mut()
-                    .get_from_identifier_mut(font_identifier)
-                    .unwrap()
-                    .set_codepoints(pdf_glyph, char, None);
-            }
-            let identifier = container.borrow().cid_font().identifier();
+            let identifier = match &self.font {
+                FormFont::Embedded(font) => {
+                    let container = sc.register_font_container(font.clone());
+                    for (codepoint, glyph) in font.font_ref().charmap().mappings() {
+                        let glyph =
+                            ColoredGlyph::new(GlyphId::new(glyph.to_u32()), rgb::Color::black());
+                        let (font_identifier, pdf_glyph) = container.borrow_mut().add_glyph(glyph);
+                        let char = char::from_u32(codepoint).unwrap().to_string();
+                        container
+                            .borrow_mut()
+                            .get_from_identifier_mut(font_identifier)
+                            .unwrap()
+                            .set_codepoints(pdf_glyph, char, None);
+                    }
+
+                    let identifier = container.borrow().cid_font().identifier();
+                    identifier
+                }
+                FormFont::Standard(standard_font) => {
+                    crate::text::FontIdentifier::Standard(*standard_font)
+                }
+            };
             let font_name = sc.register_font_identifier(identifier);
             let font_name = rd_builder.register_resource(font_name);
 
@@ -719,6 +729,12 @@ pub mod variable_text {
 
             content.finish()
         }
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum FormFont {
+        Embedded(Font),
+        Standard(StandardFont),
     }
 }
 

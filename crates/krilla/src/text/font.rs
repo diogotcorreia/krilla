@@ -18,6 +18,22 @@ use crate::text::GlyphId;
 use crate::util::Prehashed;
 use crate::Data;
 
+#[allow(missing_docs)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub enum StandardFont {
+    Helvetica,
+}
+
+impl StandardFont {
+    pub(crate) const ALL: [Self; 1] = [Self::Helvetica];
+
+    pub(crate) fn base_font(&self) -> &'static str {
+        match self {
+            Self::Helvetica => "Helvetica",
+        }
+    }
+}
+
 /// An OpenType font. Can be a TrueType, OpenType font or a TrueType collection.
 /// It holds a reference to the underlying data as well as some basic information
 /// about the font.
