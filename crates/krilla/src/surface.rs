@@ -214,7 +214,7 @@ impl<'a> Surface<'a> {
 
                     Identifier::dummy()
                 }
-                ContentTag::Span(_) | ContentTag::VariableText | ContentTag::Other => {
+                ContentTag::Span(_) | ContentTag::Other => {
                     self.bd.get_mut().start_marked_content_with_properties(
                         self.sc,
                         Some(id.mcid),
@@ -238,9 +238,20 @@ impl<'a> Surface<'a> {
         }
     }
 
-    #[allow(missing_docs)]
-    pub fn insert_variable_text(&mut self) {
+    /// Start a new variable text marked section.
+    ///
+    /// # Panics
+    /// Panics if a tagged/marked section has already been started (either via this function or via [`Surface::start_tagged`]).
+    pub fn start_variable_text(&mut self) {
         self.bd.get_mut().start_marked_content(Name(b"Tx"));
+    }
+
+    /// End the current variable text marked section.
+    ///
+    /// # Panics
+    /// Panics if no variable text marked section has been started.
+    #[allow(missing_docs)]
+    pub fn end_variable_text(&mut self) {
         self.bd.get_mut().end_marked_content();
     }
 

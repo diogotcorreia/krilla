@@ -230,21 +230,24 @@ fn main() {
     });
 
     text_field.set_text_alignment(TextAlignment::Center);
+    text_field.set_value("testing".to_string());
 
     let text_appearance = {
         let mut builder = surface.stream_builder();
         let mut surface = builder.surface();
 
-        // surface.draw_text(
-        //     Point::from_xy(0.0, 5.0),
-        //     font.clone(),
-        //     3.0,
-        //     "Text:",
-        //     false,
-        //     TextDirection::Auto,
-        // );
+        surface.start_variable_text();
 
-        surface.insert_variable_text();
+        surface.draw_text(
+            Point::from_xy(0.0, 15.0),
+            font.clone(),
+            8.0,
+            "testing",
+            false,
+            TextDirection::Auto,
+        );
+
+        surface.end_variable_text();
 
         surface.finish();
         builder.finish()
