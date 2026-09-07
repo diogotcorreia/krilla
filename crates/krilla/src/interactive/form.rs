@@ -14,7 +14,7 @@ use crate::{
     chunk_container::ChunkContainer,
     configure::{PdfVersion, ValidationError},
     form::{
-        kind::{Checkbox, Radio},
+        kind::{Checkbox, ChoiceOption, Radio, VariableText},
         variable_text::{TextAlignment, VariableAppearance},
     },
     geom::Rect,
@@ -195,6 +195,10 @@ pub enum FieldKind {
     Radio(FormField<kind::Radio>),
     /// A text field.
     Text(FormField<kind::Text>),
+    /// A list box field.
+    ListBox(FormField<kind::ListBox>),
+    /// A combo box (dropdown) field.
+    ComboBox(FormField<kind::ComboBox>),
 }
 
 impl FieldKind {
@@ -209,6 +213,8 @@ impl FieldKind {
             Self::Checkbox(f) => f.serialize_field(sc, chunk_container, parent_ref),
             Self::Radio(f) => f.serialize_field(sc, chunk_container, parent_ref),
             Self::Text(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::ListBox(f) => f.serialize_field(sc, chunk_container, parent_ref),
+            Self::ComboBox(f) => f.serialize_field(sc, chunk_container, parent_ref),
         }
     }
 }
@@ -506,11 +512,96 @@ impl FormField<kind::Text> {
     }
 
     pub fn set_appearance(&mut self, appearance: VariableAppearance) {
-        self.kind.appearance = Some(appearance);
+        self.kind.variable_text.appearance = Some(appearance);
     }
 
     pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
-        self.kind.text_alignment = alignment;
+        self.kind.variable_text.text_alignment = alignment;
+    }
+
+    pub fn new_widget(
+        &self,
+        rect: Rect,
+        appearance: Stream,
+    ) -> WidgetAnnotation<SimpleAppearanceStream> {
+        WidgetAnnotation::simple(rect, appearance)
+    }
+}
+
+#[allow(missing_docs)]
+impl FormField<kind::ListBox> {
+    pub fn listbox(name: String) -> Self {
+        Self {
+            name,
+            ..Default::default()
+        }
+    }
+
+    pub fn set_options(&mut self, options: Vec<ChoiceOption>) {
+        self.kind.options = options;
+    }
+
+    pub fn set_multiple_options(&mut self, multiple_options: bool) {
+        self.flags.set(FieldFlags::MULTI_SELECT, multiple_options);
+    }
+
+    pub fn set_value(&mut self, value: Vec<String>) {
+        self.kind.value = value;
+    }
+
+    pub fn set_default_value(&mut self, value: Vec<String>) {
+        self.kind.default_value = value;
+    }
+
+    pub fn set_appearance(&mut self, appearance: VariableAppearance) {
+        self.kind.variable_text.appearance = Some(appearance);
+    }
+
+    pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
+        self.kind.variable_text.text_alignment = alignment;
+    }
+
+    pub fn new_widget(
+        &self,
+        rect: Rect,
+        appearance: Stream,
+    ) -> WidgetAnnotation<SimpleAppearanceStream> {
+        WidgetAnnotation::simple(rect, appearance)
+    }
+}
+
+#[allow(missing_docs)]
+impl FormField<kind::ComboBox> {
+    pub fn combobox(name: String) -> Self {
+        Self {
+            name,
+            flags: FieldFlags::COMBO,
+            ..Default::default()
+        }
+    }
+
+    pub fn set_options(&mut self, options: Vec<ChoiceOption>) {
+        self.kind.options = options;
+    }
+
+    pub fn set_edit(&mut self, edit: bool) {
+        self.flags.set(FieldFlags::EDIT, edit);
+    }
+
+    pub fn set_value(&mut self, value: String) {
+        self.kind.value = Some(value);
+    }
+
+    pub fn set_default_value(&mut self, value: String) {
+        self.kind.default_value = Some(value);
+    }
+
+    pub fn set_appearance(&mut self, appearance: VariableAppearance) {
+        self.kind.variable_text.appearance = Some(appearance);
+    }
+
+    pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
+        self.kind.variable_text.text_alignment = alignment;
     }
 
     pub fn new_widget(
@@ -576,7 +667,7 @@ pub(crate) trait SerializableField {
 /// Field kind structs.
 pub mod kind {
     use pdf_writer::{types::CheckBoxState, Name};
-    use pdf_writer::{Buf, TextStr};
+    use pdf_writer::{Buf, Finish, TextStr};
 
     use super::variable_text::{TextAlignment, VariableAppearance};
     use super::SerializableField;
@@ -648,14 +739,34 @@ pub mod kind {
         }
     }
 
+    #[derive(Debug, Clone, Default)]
+    pub(super) struct VariableText {
+        pub(super) appearance: Option<VariableAppearance>,
+        pub(super) appearance_buf: Option<Buf>,
+        pub(super) text_alignment: TextAlignment,
+    }
+
+    impl VariableText {
+        fn serialize<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
+            if self.text_alignment != TextAlignment::default() {
+                field.vartext_quadding(self.text_alignment.into());
+            }
+
+            let buf = self
+                .appearance_buf
+                .as_ref()
+                .expect("text field must have its default appearance field set");
+            let str = pdf_writer::Str(buf);
+            field.vartext_default_appearance(str);
+        }
+    }
+
     #[allow(missing_docs)]
     #[derive(Debug, Clone, Default)]
     pub struct Text {
-        pub(super) appearance: Option<VariableAppearance>,
-        pub(super) appearance_buf: Option<Buf>,
+        pub(super) variable_text: VariableText,
         pub(super) value: Option<String>,
         pub(super) default_value: Option<String>,
-        pub(super) text_alignment: TextAlignment,
     }
 
     impl SerializableField for Text {
@@ -668,16 +779,81 @@ pub mod kind {
                 field.text_default_value(TextStr(value));
             }
 
-            if self.text_alignment != TextAlignment::default() {
-                field.vartext_quadding(self.text_alignment.into());
-            }
+            self.variable_text.serialize(field);
+        }
+    }
 
-            let buf = self
-                .appearance_buf
-                .as_ref()
-                .expect("text field must have its default appearance field set");
-            let str = pdf_writer::Str(buf);
-            field.vartext_default_appearance(str);
+    #[allow(missing_docs)]
+    #[derive(Debug, Clone, Default)]
+    pub struct ChoiceOption {
+        pub value: String,
+        pub display_name: Option<String>,
+    }
+
+    impl ChoiceOption {
+        fn serialize<'a>(&self, options: &mut pdf_writer::writers::ChoiceOptions<'a>) {
+            match &self.display_name {
+                Some(display_name) => options.export(TextStr(&self.value), TextStr(display_name)),
+                None => options.option(TextStr(&self.value)),
+            };
+        }
+    }
+
+    #[allow(missing_docs)]
+    #[derive(Debug, Clone, Default)]
+    pub struct ListBox {
+        pub(super) variable_text: VariableText,
+        pub(super) value: Vec<String>,
+        pub(super) default_value: Vec<String>,
+        pub(super) options: Vec<ChoiceOption>,
+    }
+
+    impl SerializableField for ListBox {
+        fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
+            field.field_type(pdf_writer::types::FieldType::Choice);
+            match self.value.len() {
+                0 => field.choice_value(None),
+                1 => field.choice_value(Some(TextStr(&self.value[0]))),
+                _ => field.choice_values(self.value.iter().map(|s| TextStr(s))),
+            };
+            match self.default_value.len() {
+                0 => field.choice_default_value(None),
+                1 => field.choice_default_value(Some(TextStr(&self.default_value[0]))),
+                _ => field.choice_default_values(self.default_value.iter().map(|s| TextStr(s))),
+            };
+
+            let mut options = field.choice_options();
+            for opt in &self.options {
+                opt.serialize(&mut options)
+            }
+            options.finish();
+
+            self.variable_text.serialize(field);
+        }
+    }
+
+    #[allow(missing_docs)]
+    #[derive(Debug, Clone, Default)]
+    pub struct ComboBox {
+        pub(super) variable_text: VariableText,
+        pub(super) value: Option<String>,
+        pub(super) default_value: Option<String>,
+        pub(super) options: Vec<ChoiceOption>,
+    }
+
+    impl SerializableField for ComboBox {
+        fn serialize_field<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
+            field.field_type(pdf_writer::types::FieldType::Choice);
+            field.choice_value(self.value.as_deref().map(TextStr));
+            field.choice_default_value(self.default_value.as_deref().map(TextStr));
+
+            let mut options = field.choice_options();
+            for opt in &self.options {
+                opt.serialize(&mut options)
+            }
+            options.finish();
+
+            self.variable_text.serialize(field);
         }
     }
 }
@@ -796,17 +972,19 @@ impl Visit for FieldKind {
     fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
         #[allow(clippy::single_match)]
         match self {
-            FieldKind::Text(form_field) => form_field.visit(sc, rd_builder),
+            FieldKind::Text(form_field) => form_field.kind.variable_text.visit(sc, rd_builder),
+            FieldKind::ListBox(form_field) => form_field.kind.variable_text.visit(sc, rd_builder),
+            FieldKind::ComboBox(form_field) => form_field.kind.variable_text.visit(sc, rd_builder),
             _ => {}
         }
     }
 }
 
-impl Visit for FormField<kind::Text> {
+impl Visit for VariableText {
     fn visit(&mut self, sc: &mut SerializeContext, rd_builder: &mut ResourceDictionaryBuilder) {
-        if let Some(ap) = &self.kind.appearance {
+        if let Some(ap) = &self.appearance {
             let buf = ap.serialize(sc, rd_builder);
-            self.kind.appearance_buf = Some(buf);
+            self.appearance_buf = Some(buf);
         }
     }
 }
