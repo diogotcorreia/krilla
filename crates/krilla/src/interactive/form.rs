@@ -14,8 +14,8 @@ use crate::{
     chunk_container::ChunkContainer,
     configure::{PdfVersion, ValidationError},
     form::{
-        kind::{Checkbox, ChoiceOption, Radio, VariableText},
-        variable_text::{TextAlignment, VariableAppearance},
+        kind::{Checkbox, ChoiceOption, Radio},
+        variable_text::{TextAlignment, VariableAppearance, VariableText},
     },
     geom::Rect,
     resource::ResourceDictionaryBuilder,
@@ -246,7 +246,8 @@ impl From<FormField<kind::Text>> for FieldKind {
 /// A form field.
 ///
 /// Fields can be created via [`FormField::push_button`],
-/// [`FormField::checkbox`], and [`FormField::radio`].
+/// [`FormField::checkbox`], [`FormField::radio`], [`FormField::text`],
+/// [`FormField::listbox`], and [`FormField::combobox`].
 #[derive(Debug, Clone, Default)]
 pub struct FormField<T> {
     name: String,
@@ -494,8 +495,9 @@ impl FormField<kind::Radio> {
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::Text> {
+    /// Create a text field.
+    /// The field name must not contain any period character (`.`).
     pub fn text(name: String) -> Self {
         Self {
             name,
@@ -503,34 +505,104 @@ impl FormField<kind::Text> {
         }
     }
 
+    /// Set whether the field should accept text across multiple lines.
+    /// Default: false
     pub fn set_mutliline(&mut self, multiline: bool) {
         self.flags.set(FieldFlags::MULTILINE, multiline);
     }
 
+    /// Set whether the field should accept text across multiple lines.
+    /// Default: false
+    pub fn with_mutliline(mut self, multiline: bool) -> Self {
+        self.set_mutliline(multiline);
+        self
+    }
+
+    /// Set whether to divide the field in equally spaced positions (i.e., combs).
+    /// If this is true, [max length](Self::set_max_length) should be set.
+    /// Default: false
     pub fn set_comb(&mut self, comb: bool) {
         self.flags.set(FieldFlags::COMB, comb);
     }
 
+    /// Set whether to divide the field in equally spaced positions (i.e., combs).
+    /// If this is true, [max length](Self::set_max_length) should be set.
+    /// Default: false
+    pub fn with_comb(mut self, comb: bool) -> Self {
+        self.set_comb(comb);
+        self
+    }
+
+    /// Set the maximum length of the field's value, in number of characters.
+    /// If the provided length is [`None`], the field accepts any number of characters.
     pub fn set_max_length(&mut self, max_len: Option<i32>) {
         self.kind.max_length = max_len;
     }
 
+    /// Set the maximum length of the field's value, in number of characters.
+    /// If the provided length is [`None`], the field accepts any number of characters.
+    pub fn with_max_length(mut self, max_len: Option<i32>) -> Self {
+        self.set_max_length(max_len);
+        self
+    }
+
+    /// Set the value of the text field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
     pub fn set_value(&mut self, value: String) {
         self.kind.value = Some(value);
     }
 
+    /// Set the value of the text field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
+    pub fn with_value(mut self, value: String) -> Self {
+        self.set_value(value);
+        self
+    }
+
+    /// Set the default value of the text field.
     pub fn set_default_value(&mut self, value: String) {
         self.kind.default_value = Some(value);
     }
 
+    /// Set the default value of the text field.
+    pub fn with_default_value(mut self, value: String) -> Self {
+        self.set_default_value(value);
+        self
+    }
+
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_appearance(&mut self, appearance: VariableAppearance) {
         self.kind.variable_text.appearance = Some(appearance);
     }
 
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_appearance(mut self, appearance: VariableAppearance) -> Self {
+        self.set_appearance(appearance);
+        self
+    }
+
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
         self.kind.variable_text.text_alignment = alignment;
     }
 
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_text_alignment(mut self, alignment: TextAlignment) -> Self {
+        self.set_text_alignment(alignment);
+        self
+    }
+
+    /// Create a widget annotation for the text field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `appearance`: The appearance of the widget annotation, which should match the current
+    ///   value of this field. It must contain [variable text marked content](crate::surface::Surface::start_variable_text).
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -540,8 +612,9 @@ impl FormField<kind::Text> {
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::ListBox> {
+    /// Create a listbox field.
+    /// The field name must not contain any period character (`.`).
     pub fn listbox(name: String) -> Self {
         Self {
             name,
@@ -549,30 +622,91 @@ impl FormField<kind::ListBox> {
         }
     }
 
+    /// Set the options available on the listbox.
     pub fn set_options(&mut self, options: Vec<ChoiceOption>) {
         self.kind.options = options;
     }
 
+    /// Set the options available on the listbox.
+    pub fn with_options(mut self, options: Vec<ChoiceOption>) -> Self {
+        self.set_options(options);
+        self
+    }
+
+    /// Set whether to accept selecting more than one option at a time.
+    /// Default: false
     pub fn set_multiple_options(&mut self, multiple_options: bool) {
         self.flags.set(FieldFlags::MULTI_SELECT, multiple_options);
     }
 
+    /// Set whether to accept selecting more than one option at a time.
+    /// Default: false
+    pub fn with_multiple_options(mut self, multiple_options: bool) -> Self {
+        self.set_multiple_options(multiple_options);
+        self
+    }
+
+    /// Set the value (selected options) of the listbox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
     pub fn set_value(&mut self, value: Vec<String>) {
         self.kind.value = value;
     }
 
+    /// Set the value (selected options) of the listbox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
+    pub fn with_value(mut self, value: Vec<String>) -> Self {
+        self.set_value(value);
+        self
+    }
+
+    /// Set the default value (selected options) of the listbox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
     pub fn set_default_value(&mut self, value: Vec<String>) {
         self.kind.default_value = value;
     }
 
+    /// Set the default value (selected options) of the listbox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
+    pub fn with_default_value(mut self, value: Vec<String>) -> Self {
+        self.set_default_value(value);
+        self
+    }
+
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_appearance(&mut self, appearance: VariableAppearance) {
         self.kind.variable_text.appearance = Some(appearance);
     }
 
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_appearance(mut self, appearance: VariableAppearance) -> Self {
+        self.set_appearance(appearance);
+        self
+    }
+
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
         self.kind.variable_text.text_alignment = alignment;
     }
 
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_text_alignment(mut self, alignment: TextAlignment) -> Self {
+        self.set_text_alignment(alignment);
+        self
+    }
+
+    /// Create a widget annotation for the listbox field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `appearance`: The appearance of the widget annotation, which should match the current
+    ///   value of this field. It must contain [variable text marked content](crate::surface::Surface::start_variable_text).
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -582,8 +716,9 @@ impl FormField<kind::ListBox> {
     }
 }
 
-#[allow(missing_docs)]
 impl FormField<kind::ComboBox> {
+    /// Create a combobox field.
+    /// The field name must not contain any period character (`.`).
     pub fn combobox(name: String) -> Self {
         Self {
             name,
@@ -592,30 +727,91 @@ impl FormField<kind::ComboBox> {
         }
     }
 
+    /// Set the options available on the combobox.
     pub fn set_options(&mut self, options: Vec<ChoiceOption>) {
         self.kind.options = options;
     }
 
+    /// Set the options available on the combobox.
+    pub fn with_options(mut self, options: Vec<ChoiceOption>) -> Self {
+        self.set_options(options);
+        self
+    }
+
+    /// Set whether to allow a free-form text option in addition to the given available options.
+    /// Default: false
     pub fn set_edit(&mut self, edit: bool) {
         self.flags.set(FieldFlags::EDIT, edit);
     }
 
+    /// Set whether to allow a free-form text option in addition to the given available options.
+    /// Default: false
+    pub fn with_edit(mut self, edit: bool) -> Self {
+        self.set_edit(edit);
+        self
+    }
+
+    /// Set the value (selected option) of the combobox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
     pub fn set_value(&mut self, value: String) {
         self.kind.value = Some(value);
     }
 
+    /// Set the value (selected option) of the combobox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
+    pub fn with_value(mut self, value: String) -> Self {
+        self.set_value(value);
+        self
+    }
+
+    /// Set the default value (selected option) of the combobox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
     pub fn set_default_value(&mut self, value: String) {
         self.kind.default_value = Some(value);
     }
 
+    /// Set the default value (selected option) of the combobox field.
+    /// Keep in mind the caller has the responsibility of creating and
+    /// applying the corresponding appearance stream.
+    pub fn with_default_value(mut self, value: String) -> Self {
+        self.set_default_value(value);
+        self
+    }
+
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_appearance(&mut self, appearance: VariableAppearance) {
         self.kind.variable_text.appearance = Some(appearance);
     }
 
+    /// Set the appearance characteristics the value of the field should have when drawn.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_appearance(mut self, appearance: VariableAppearance) -> Self {
+        self.set_appearance(appearance);
+        self
+    }
+
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
     pub fn set_text_alignment(&mut self, alignment: TextAlignment) {
         self.kind.variable_text.text_alignment = alignment;
     }
 
+    /// Set the text alignment of the value of the field.
+    /// This is not used by krilla, but by future PDF readers when changing the value of the field.
+    pub fn with_text_alignment(mut self, alignment: TextAlignment) -> Self {
+        self.set_text_alignment(alignment);
+        self
+    }
+
+    /// Create a widget annotation for the combobox field.
+    ///
+    /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
+    /// - `appearance`: The appearance of the widget annotation, which should match the current
+    ///   value of this field. It must contain [variable text marked content](crate::surface::Surface::start_variable_text).
     pub fn new_widget(
         &self,
         rect: Rect,
@@ -679,9 +875,9 @@ pub(crate) trait SerializableField {
 /// Field kind structs.
 pub mod kind {
     use pdf_writer::{types::CheckBoxState, Name};
-    use pdf_writer::{Buf, Finish, TextStr};
+    use pdf_writer::{Finish, TextStr};
 
-    use super::variable_text::{TextAlignment, VariableAppearance};
+    use super::variable_text::VariableText;
     use super::SerializableField;
 
     /// A push button.
@@ -751,29 +947,8 @@ pub mod kind {
         }
     }
 
-    #[derive(Debug, Clone, Default)]
-    pub(super) struct VariableText {
-        pub(super) appearance: Option<VariableAppearance>,
-        pub(super) appearance_buf: Option<Buf>,
-        pub(super) text_alignment: TextAlignment,
-    }
-
-    impl VariableText {
-        fn serialize<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
-            if self.text_alignment != TextAlignment::default() {
-                field.vartext_quadding(self.text_alignment.into());
-            }
-
-            let buf = self
-                .appearance_buf
-                .as_ref()
-                .expect("text field must have its default appearance field set");
-            let str = pdf_writer::Str(buf);
-            field.vartext_default_appearance(str);
-        }
-    }
-
-    #[allow(missing_docs)]
+    /// A text field.
+    /// Create a field of this type via [`FormField::text`](super::FormField::text).
     #[derive(Debug, Clone, Default)]
     pub struct Text {
         pub(super) variable_text: VariableText,
@@ -800,10 +975,13 @@ pub mod kind {
         }
     }
 
-    #[allow(missing_docs)]
+    /// An option for a listbox or combobox.
     #[derive(Debug, Clone, Default)]
     pub struct ChoiceOption {
+        /// The export value of the option.
+        /// If display name is [`None`], this is used as the display name too.
         pub value: String,
+        /// The user-facing name of the option.
         pub display_name: Option<String>,
     }
 
@@ -816,7 +994,8 @@ pub mod kind {
         }
     }
 
-    #[allow(missing_docs)]
+    /// A listbox.
+    /// Create a field of this type via [`FormField::listbox`](super::FormField::listbox).
     #[derive(Debug, Clone, Default)]
     pub struct ListBox {
         pub(super) variable_text: VariableText,
@@ -849,7 +1028,8 @@ pub mod kind {
         }
     }
 
-    #[allow(missing_docs)]
+    /// A combobox.
+    /// Create a field of this type via [`FormField::combobox`](super::FormField::combobox).
     #[derive(Debug, Clone, Default)]
     pub struct ComboBox {
         pub(super) variable_text: VariableText,
@@ -875,7 +1055,7 @@ pub mod kind {
     }
 }
 
-#[allow(missing_docs)]
+/// Appearance of variable text fields (text, listbox, combbox).
 pub mod variable_text {
     use pdf_writer::{types::Quadding, Buf};
     use skrifa::MetadataProvider;
@@ -888,9 +1068,36 @@ pub mod variable_text {
         util::NameExt,
     };
 
+    #[derive(Debug, Clone, Default)]
+    pub(super) struct VariableText {
+        pub(super) appearance: Option<VariableAppearance>,
+        pub(super) appearance_buf: Option<Buf>,
+        pub(super) text_alignment: TextAlignment,
+    }
+
+    impl VariableText {
+        pub(super) fn serialize<'a>(&self, field: &mut pdf_writer::writers::Field<'a>) {
+            if self.text_alignment != TextAlignment::default() {
+                field.vartext_quadding(self.text_alignment.into());
+            }
+
+            let buf = self
+                .appearance_buf
+                .as_ref()
+                .expect("text field must have its default appearance field set");
+            let str = pdf_writer::Str(buf);
+            field.vartext_default_appearance(str);
+        }
+    }
+
+    /// Appearance of variable text fields.
+    /// Defines how PDF processors should draw text when modifying the field's contents.
     #[derive(Debug, Clone)]
     pub struct VariableAppearance {
+        /// The font family of the text.
         pub font: FormFont,
+        /// The font size of the text.
+        /// If set to 0, the PDF processor should automatically size it to fit.
         pub font_size: f32,
     }
 
@@ -933,17 +1140,24 @@ pub mod variable_text {
         }
     }
 
+    /// A font family used to fill out a form field.
     #[derive(Debug, Clone)]
     pub enum FormFont {
+        /// An embedded OpenType font, without subsetting.
         Embedded(Font),
+        /// One of the 14 standard type 1 PDF fonts.
         Standard(StandardFont),
     }
 
+    /// The horizontal alignment of text.
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
     pub enum TextAlignment {
+        /// Left.
         #[default]
         Left,
+        /// Center.
         Center,
+        /// Right.
         Right,
     }
 
