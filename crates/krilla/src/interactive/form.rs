@@ -923,7 +923,7 @@ pub mod variable_text {
                     crate::text::FontIdentifier::Standard(*standard_font)
                 }
             };
-            let font_name = sc.register_font_identifier(identifier);
+            let font_name = sc.register_font_identifier(identifier).with_forms(true);
             let font_name = rd_builder.register_resource(font_name);
 
             let mut content = sc.new_content();

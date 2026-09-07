@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
 use pdf_writer::types::ProcSet;
 use pdf_writer::writers;
@@ -10,11 +9,11 @@ use pdf_writer::{Chunk, Dict, Finish, Name, Ref};
 use crate::serialize::{Cacheable, SerializeContext};
 use crate::util::NameExt;
 
-pub(crate) trait Resource {
+pub(crate) trait Resource: Eq + Hash + Sized + Copy {
     fn new(ref_: Ref) -> Self;
     fn get_ref(&self) -> Ref;
     fn get_dict<'a>(resources: &'a mut writers::Resources) -> Dict<'a>;
-    fn get_prefix() -> &'static str;
+    fn get_prefix(&self) -> &'static str;
     fn get_mapper(b: &mut ResourceDictionaryBuilder) -> &mut ResourceMapper<Self>;
 }
 
@@ -22,7 +21,7 @@ pub(crate) trait Resourceable: Cacheable {
     type Resource: Resource;
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub(crate) struct ExtGState(Ref);
 
 impl Resource for ExtGState {
@@ -38,7 +37,7 @@ impl Resource for ExtGState {
         resources.ext_g_states()
     }
 
-    fn get_prefix() -> &'static str {
+    fn get_prefix(&self) -> &'static str {
         "g"
     }
 
@@ -47,7 +46,7 @@ impl Resource for ExtGState {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub(crate) struct ColorSpace(Ref);
 
 impl Resource for ColorSpace {
@@ -63,7 +62,7 @@ impl Resource for ColorSpace {
         resources.color_spaces()
     }
 
-    fn get_prefix() -> &'static str {
+    fn get_prefix(&self) -> &'static str {
         "c"
     }
 
@@ -72,7 +71,7 @@ impl Resource for ColorSpace {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub(crate) struct Shading(Ref);
 
 impl Resource for Shading {
@@ -88,7 +87,7 @@ impl Resource for Shading {
         resources.shadings()
     }
 
-    fn get_prefix() -> &'static str {
+    fn get_prefix(&self) -> &'static str {
         "s"
     }
 
@@ -97,7 +96,7 @@ impl Resource for Shading {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub(crate) struct XObject(Ref);
 
 impl Resource for XObject {
@@ -113,7 +112,7 @@ impl Resource for XObject {
         resources.x_objects()
     }
 
-    fn get_prefix() -> &'static str {
+    fn get_prefix(&self) -> &'static str {
         "x"
     }
 
@@ -122,7 +121,7 @@ impl Resource for XObject {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub(crate) struct Pattern(Ref);
 
 impl Resource for Pattern {
@@ -138,7 +137,7 @@ impl Resource for Pattern {
         resources.patterns()
     }
 
-    fn get_prefix() -> &'static str {
+    fn get_prefix(&self) -> &'static str {
         "p"
     }
 
@@ -147,28 +146,43 @@ impl Resource for Pattern {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub(crate) struct Font(Ref);
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+pub(crate) struct Font {
+    ref_: Ref,
+    /// Whether this font is used in the default appearance stream of form fields
+    forms: bool,
+}
 
 impl Resource for Font {
     fn new(ref_: Ref) -> Self {
-        Self(ref_)
+        Self { ref_, forms: false }
     }
 
     fn get_ref(&self) -> Ref {
-        self.0
+        self.ref_
     }
 
     fn get_dict<'a>(resources: &'a mut writers::Resources) -> Dict<'a> {
         resources.fonts()
     }
 
-    fn get_prefix() -> &'static str {
-        "f"
+    fn get_prefix(&self) -> &'static str {
+        if self.forms {
+            "ff"
+        } else {
+            "f"
+        }
     }
 
     fn get_mapper(b: &mut ResourceDictionaryBuilder) -> &mut ResourceMapper<Font> {
         &mut b.fonts
+    }
+}
+
+impl Font {
+    pub(crate) fn with_forms(mut self, forms: bool) -> Self {
+        self.forms = forms;
+        self
     }
 }
 
@@ -198,7 +212,7 @@ impl ResourceDictionaryBuilder {
     where
         T: Resource,
     {
-        T::get_mapper(self).remap_with_name(obj.get_ref())
+        T::get_mapper(self).remap_with_name(obj)
     }
 
     pub(crate) fn finish(self) -> ResourceDictionary {
@@ -303,8 +317,7 @@ where
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Default)]
 pub(crate) struct ResourceList<V> {
-    entries: Vec<Ref>,
-    phantom: PhantomData<V>,
+    entries: Vec<V>,
 }
 
 impl<T> ResourceList<T>
@@ -312,33 +325,29 @@ where
     T: Resource,
 {
     pub(crate) fn empty() -> ResourceList<T> {
-        Self {
-            entries: vec![],
-            phantom: Default::default(),
-        }
+        Self { entries: vec![] }
     }
 
     pub(crate) fn len(&self) -> u32 {
         self.entries.len() as u32
     }
 
-    fn name_from_number(num: ResourceNumber) -> String {
-        format!("{}{}", T::get_prefix(), num)
+    fn name_from_number(resource: &T, num: ResourceNumber) -> String {
+        format!("{}{}", resource.get_prefix(), num)
     }
 
     pub(crate) fn get_entries(&self) -> impl Iterator<Item = (String, Ref)> + '_ {
         self.entries
             .iter()
             .enumerate()
-            .map(|(i, r)| (Self::name_from_number(i as ResourceNumber), *r))
+            .map(|(i, r)| (Self::name_from_number(r, i as ResourceNumber), r.get_ref()))
     }
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct ResourceMapper<T: ?Sized> {
-    forward: Vec<Ref>,
-    backward: HashMap<Ref, ResourceNumber>,
-    phantom: PhantomData<T>,
+pub(crate) struct ResourceMapper<T: Eq + Hash> {
+    forward: Vec<T>,
+    backward: HashMap<T, ResourceNumber>,
 }
 
 impl<T> ResourceMapper<T>
@@ -349,33 +358,31 @@ where
         Self {
             forward: Vec::new(),
             backward: HashMap::new(),
-            phantom: PhantomData,
         }
     }
 
-    pub(crate) fn remap(&mut self, ref_: Ref) -> ResourceNumber {
+    pub(crate) fn remap(&mut self, resource: T) -> ResourceNumber {
         let forward = &mut self.forward;
         let backward = &mut self.backward;
 
-        *backward.entry(ref_).or_insert_with(|| {
+        *backward.entry(resource).or_insert_with(|| {
             let old = forward.len();
-            forward.push(ref_);
+            forward.push(resource);
             old as ResourceNumber
         })
     }
 
-    pub(crate) fn remap_with_name(&mut self, ref_: Ref) -> String {
-        Self::name_from_number(self.remap(ref_))
+    pub(crate) fn remap_with_name(&mut self, resource: T) -> String {
+        Self::name_from_number(&resource, self.remap(resource))
     }
 
-    fn name_from_number(num: ResourceNumber) -> String {
-        format!("{}{}", T::get_prefix(), num)
+    fn name_from_number(resource: &T, num: ResourceNumber) -> String {
+        format!("{}{}", resource.get_prefix(), num)
     }
 
     pub(crate) fn into_resource_list(self) -> ResourceList<T> {
         ResourceList {
             entries: self.forward,
-            phantom: Default::default(),
         }
     }
 }
