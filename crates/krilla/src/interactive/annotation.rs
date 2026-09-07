@@ -329,7 +329,7 @@ impl LinkAnnotation {
 }
 
 /// A widget annotation.
-/// It can be created via a [form field][crate::forms::FormField].
+/// It can be created via a [form field][crate::form::FormField].
 pub struct WidgetAnnotation<T> {
     rect: Rect,
     appearance: T,

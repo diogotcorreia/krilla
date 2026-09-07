@@ -380,12 +380,12 @@ impl FormField<kind::Checkbox> {
         }
     }
 
-    /// Set whether this checkbox is checked by default.
+    /// Set whether the checkbox is checked by default.
     pub fn set_default_checked(&mut self, checked: bool) {
         self.kind.default_checked = Some(checked);
     }
 
-    /// Set whether this checkbox is checked by default.
+    /// Set whether the checkbox is checked by default.
     pub fn with_default_checked(mut self, checked: bool) -> Self {
         self.set_default_checked(checked);
         self
@@ -416,7 +416,7 @@ impl FormField<kind::Checkbox> {
 impl FormField<kind::Radio> {
     /// Create a radio group field.
     /// The field name must not contain any period character (`.`).
-    /// If the provided value is None, no option is selected.
+    /// If the provided value is [`None`], no option is selected.
     pub fn radio(name: String, value: Option<String>) -> Self {
         debug_assert!(!name.contains('.'), "field name cannot contain a period");
         Self {
@@ -432,26 +432,26 @@ impl FormField<kind::Radio> {
 
     /// Set the default value of the radio group.
     /// It should correspond to a value of one of the annotations.
-    /// If the provided value is None, no option is selected.
+    /// If the provided value is [`None`], no option is selected.
     pub fn set_default_value(&mut self, value: Option<String>) {
         self.kind.default_value = value;
     }
 
     /// Set the default value of the radio group.
     /// It should correspond to a value of one of the annotations.
-    /// If the provided value is None, no option is selected.
+    /// If the provided value is [`None`], no option is selected.
     pub fn with_default_value(mut self, value: Option<String>) -> Self {
         self.set_default_value(value);
         self
     }
 
-    /// Set whether to allow unselecting all buttons of this radio group.
+    /// Set whether to allow unselecting all buttons of the radio group.
     /// Default: true
     pub fn set_allow_toggling_off(&mut self, allow_off: bool) {
         self.flags.set(FieldFlags::NO_TOGGLE_TO_OFF, !allow_off);
     }
 
-    /// Set whether to allow unselecting all buttons of this radio group.
+    /// Set whether to allow unselecting all buttons of the radio group.
     /// Default: true
     pub fn with_allow_toggling_off(mut self, allow_off: bool) -> Self {
         self.set_allow_toggling_off(allow_off);
@@ -474,7 +474,7 @@ impl FormField<kind::Radio> {
     /// Create a widget annotation for the radio group field.
     ///
     /// - `rect`: The bounding box of the widget annotation that it should cover on the page.
-    /// - `value`: The value this widget annotation represents in the radio group.
+    /// - `value`: The value the widget annotation represents in the radio group.
     /// - `off_appearance`: The appearance of the widget annotation when the radio button is off.
     /// - `on_appearance`: The appearance of the widget annotation when the radio button is on.
     pub fn new_widget(
