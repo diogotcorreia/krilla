@@ -18,18 +18,73 @@ use crate::text::GlyphId;
 use crate::util::Prehashed;
 use crate::Data;
 
-#[allow(missing_docs)]
+/// One of the 14 standard type 1 fonts (PDF 1.0-1.7).
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub enum StandardFont {
+    /// Courier.
+    Courier,
+    /// Courier-Bold.
+    CourierBold,
+    /// Courier-BoldOblique.
+    CourierBoldOblique,
+    /// Courier-Oblique.
+    CourierOblique,
+    /// Helvetica.
     Helvetica,
+    /// Helvetica-Bold.
+    HelveticaBold,
+    /// Helvetica-BoldOblique.
+    HelveticaBoldOblique,
+    /// Helvetica-Oblique.
+    HelveticaOblique,
+    /// Symbol.
+    Symbol,
+    /// Times-Bold.
+    TimesBold,
+    /// Times-BoldItalic.
+    TimesBoldItalic,
+    /// Times-Italic.
+    TimesItalic,
+    /// Times-Roman.
+    TimesRoman,
+    /// ZapfDingbats.
+    ZapfDingbats,
 }
 
 impl StandardFont {
-    pub(crate) const ALL: [Self; 1] = [Self::Helvetica];
+    pub(crate) const ALL: [Self; 14] = [
+        Self::Courier,
+        Self::CourierBold,
+        Self::CourierBoldOblique,
+        Self::CourierOblique,
+        Self::Helvetica,
+        Self::HelveticaBold,
+        Self::HelveticaBoldOblique,
+        Self::HelveticaOblique,
+        Self::Symbol,
+        Self::TimesBold,
+        Self::TimesBoldItalic,
+        Self::TimesItalic,
+        Self::TimesRoman,
+        Self::ZapfDingbats,
+    ];
 
     pub(crate) fn base_font(&self) -> &'static str {
         match self {
+            Self::Courier => "Courier",
+            Self::CourierBold => "Courier-Bold",
+            Self::CourierBoldOblique => "Courier-BoldOblique",
+            Self::CourierOblique => "Courier-Oblique",
             Self::Helvetica => "Helvetica",
+            Self::HelveticaBold => "Helvetica-Bold",
+            Self::HelveticaBoldOblique => "Helvetica-BoldOblique",
+            Self::HelveticaOblique => "Helvetica-Oblique",
+            Self::Symbol => "Symbol",
+            Self::TimesBold => "Times-Bold",
+            Self::TimesBoldItalic => "TimesBold-Italic",
+            Self::TimesItalic => "Times-Italic",
+            Self::TimesRoman => "Times-Roman",
+            Self::ZapfDingbats => "ZapfDingbats",
         }
     }
 }
