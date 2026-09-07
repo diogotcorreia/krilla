@@ -503,6 +503,18 @@ impl FormField<kind::Text> {
         }
     }
 
+    pub fn set_mutliline(&mut self, multiline: bool) {
+        self.flags.set(FieldFlags::MULTILINE, multiline);
+    }
+
+    pub fn set_comb(&mut self, comb: bool) {
+        self.flags.set(FieldFlags::COMB, comb);
+    }
+
+    pub fn set_max_length(&mut self, max_len: Option<i32>) {
+        self.kind.max_length = max_len;
+    }
+
     pub fn set_value(&mut self, value: String) {
         self.kind.value = Some(value);
     }
@@ -767,6 +779,7 @@ pub mod kind {
         pub(super) variable_text: VariableText,
         pub(super) value: Option<String>,
         pub(super) default_value: Option<String>,
+        pub(super) max_length: Option<i32>,
     }
 
     impl SerializableField for Text {
@@ -777,6 +790,10 @@ pub mod kind {
             }
             if let Some(value) = &self.default_value {
                 field.text_default_value(TextStr(value));
+            }
+
+            if let Some(len) = self.max_length {
+                field.text_max_len(len);
             }
 
             self.variable_text.serialize(field);
