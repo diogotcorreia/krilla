@@ -143,6 +143,8 @@ pub enum ValidationError {
     /// content, reset form, etc.).
     ContainsMutatingAction(Option<Location>),
     /// The PDF contains an annotation or field that has an additional-actions dictionary.
+    // Note that PDF/A-4 allows additional-actions, but limits it to certain keys, which is not
+    // implemented in krilla yet.
     ContainsAdditionalActions(Option<Location>),
     /// The PDF contains another embedded PDF.
     ///
