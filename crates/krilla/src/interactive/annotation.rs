@@ -51,11 +51,11 @@ impl Annotation {
     /// Note that the alt text might be required in some cases, for example
     /// when exporting to PDF/UA.
     pub fn new_widget(
-        annotation: impl Into<WidgetAnnotationKind>,
+        widget: impl Into<WidgetAnnotationKind>,
         alt_text: Option<String>,
     ) -> Self {
         Self {
-            annotation_type: AnnotationType::Widget(annotation.into()),
+            annotation_type: AnnotationType::Widget(widget.into()),
             alt: alt_text,
             struct_parent: None,
             location: None,
@@ -81,9 +81,9 @@ impl From<LinkAnnotation> for Annotation {
 }
 
 impl From<WidgetAnnotationKind> for Annotation {
-    fn from(value: WidgetAnnotationKind) -> Self {
+    fn from(widget: WidgetAnnotationKind) -> Self {
         Self {
-            annotation_type: AnnotationType::Widget(value),
+            annotation_type: AnnotationType::Widget(widget),
             alt: None,
             struct_parent: None,
             location: None,
@@ -688,20 +688,20 @@ pub struct DualStateAppearance<T> {
 pub type DualStateAppearanceStream = DualStateAppearance<Stream>;
 
 impl From<WidgetAnnotation<SimpleAppearanceStream>> for WidgetAnnotationKind {
-    fn from(value: WidgetAnnotation<SimpleAppearanceStream>) -> Self {
-        Self::Simple(Box::new(value))
+    fn from(widget: WidgetAnnotation<SimpleAppearanceStream>) -> Self {
+        Self::Simple(Box::new(widget))
     }
 }
 
 impl From<WidgetAnnotation<NamedAppearanceStream>> for WidgetAnnotationKind {
-    fn from(value: WidgetAnnotation<NamedAppearanceStream>) -> Self {
-        Self::Named(Box::new(value))
+    fn from(widget: WidgetAnnotation<NamedAppearanceStream>) -> Self {
+        Self::Named(Box::new(widget))
     }
 }
 
 impl From<WidgetAnnotation<DualStateAppearanceStream>> for WidgetAnnotationKind {
-    fn from(value: WidgetAnnotation<DualStateAppearanceStream>) -> Self {
-        Self::DualState(Box::new(value))
+    fn from(widget: WidgetAnnotation<DualStateAppearanceStream>) -> Self {
+        Self::DualState(Box::new(widget))
     }
 }
 
@@ -709,8 +709,8 @@ impl<T> From<WidgetAnnotation<T>> for Annotation
 where
     WidgetAnnotation<T>: Into<WidgetAnnotationKind>,
 {
-    fn from(value: WidgetAnnotation<T>) -> Self {
-        Into::<WidgetAnnotationKind>::into(value).into()
+    fn from(widget: WidgetAnnotation<T>) -> Self {
+        Into::<WidgetAnnotationKind>::into(widget).into()
     }
 }
 
