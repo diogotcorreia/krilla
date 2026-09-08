@@ -16,6 +16,7 @@ use crate::serialize::SerializeContext;
 use crate::surface::Location;
 
 /// A type of action.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum Action {
     /// A link action.
     Link(LinkAction),
@@ -54,6 +55,7 @@ impl Action {
 }
 
 /// A link action. Will open a link when clicked.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct LinkAction {
     uri: String,
 }
@@ -80,6 +82,7 @@ impl LinkAction {
 }
 
 /// A reset form action. Will reset the given form fields when triggered.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum ResetFormAction {
     /// Reset all fields in the document. Convenience variant for an empty [`ResetFormAction::Exclude`] variant.
     All,
