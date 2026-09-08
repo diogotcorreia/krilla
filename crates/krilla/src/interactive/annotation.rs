@@ -397,7 +397,7 @@ impl WidgetAnnotation<SimpleAppearanceStream> {
     }
 }
 
-/// Applies to widget annotations with a single state appearance.
+/// Applies to widget annotations with a single named state appearance.
 impl WidgetAnnotation<NamedAppearanceStream> {
     pub(crate) fn named(rect: Rect, name: String, appearance: Stream) -> Self {
         Self {
