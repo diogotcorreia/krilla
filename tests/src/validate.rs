@@ -301,14 +301,13 @@ fn reset_form_action_document_impl(document: &mut Document) {
         .with_alt_name("A button".to_string());
 
     let annot_loc = loc(2);
-    let annot = Annotation::new_widget(
+    let annot = Annotation::from(
         button
             .new_widget(
                 Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
                 button_appearance.clone(),
             )
             .with_action_mouse_press(ResetFormAction::All.into()),
-        Some("A button".to_string()),
     )
     .with_location(Some(annot_loc));
     page.add_widget_annotation(&mut button, annot);
@@ -362,14 +361,13 @@ fn validate_pdf_a_annotation_has_conditional_appearance() {
 
     let annot1_loc = {
         let annot_loc = loc(2);
-        let annot = Annotation::new_widget(
+        let annot = Annotation::from(
             button
                 .new_widget(
                     Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
                     button_appearance_normal.clone(),
                 )
                 .with_rollover_appearance(button_appearance_alt.clone()),
-            Some("A button".to_string()),
         )
         .with_location(Some(annot_loc));
         page.add_widget_annotation(&mut button, annot);
@@ -378,14 +376,13 @@ fn validate_pdf_a_annotation_has_conditional_appearance() {
     };
     let annot2_loc = {
         let annot_loc = loc(3);
-        let annot = Annotation::new_widget(
+        let annot = Annotation::from(
             button
                 .new_widget(
                     Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
                     button_appearance_normal,
                 )
                 .with_down_appearance(button_appearance_alt),
-            Some("A button".to_string()),
         )
         .with_location(Some(annot_loc));
         page.add_widget_annotation(&mut button, annot);
@@ -739,13 +736,10 @@ fn validate_pdf_ua1_empty_form_field_alt_name() {
 
     let annot_loc = loc(2);
     let annot = {
-        let annot = Annotation::new_widget(
-            button.new_widget(
-                Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
-                button_appearance,
-            ),
-            Some(String::new()),
-        )
+        let annot = Annotation::from(button.new_widget(
+            Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
+            button_appearance,
+        ))
         .with_location(Some(annot_loc));
 
         page.add_widget_annotation(&mut button, annot)
@@ -796,13 +790,10 @@ fn validate_pdf_ua1_full_example(document: &mut Document) {
         FormField::push_button("button".to_string()).with_alt_name("A button".to_string());
 
     let button_annotation = {
-        let annotation = Annotation::new_widget(
-            button.new_widget(
-                Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
-                button_appearance,
-            ),
-            Some("A button".to_string()),
-        );
+        let annotation = Annotation::from(button.new_widget(
+            Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
+            button_appearance,
+        ));
         page.add_widget_annotation(&mut button, annotation)
     };
 
@@ -870,13 +861,10 @@ fn validate_pdf_ua1_missing_requirements() {
 
     let button_annot_loc = loc(2);
     let button_annot = {
-        let annotation = Annotation::new_widget(
-            button.new_widget(
-                Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
-                button_appearance,
-            ),
-            None,
-        )
+        let annotation = Annotation::from(button.new_widget(
+            Rect::from_xywh(0.0, 0.0, 10.0, 10.0).unwrap(),
+            button_appearance,
+        ))
         .with_location(Some(button_annot_loc));
         page.add_widget_annotation(&mut button, annotation)
     };
@@ -913,7 +901,6 @@ fn validate_pdf_ua1_missing_requirements() {
         validation_errors(document.finish()),
         vec![
             ValidationError::MissingDocumentOutline,
-            ValidationError::MissingAnnotationAltText(Some(button_annot_loc)),
             ValidationError::MissingAnnotationAltText(Some(annot_loc)),
             ValidationError::MissingFieldAltName(Some(button_loc)),
             ValidationError::MissingAltText(Some(formula_loc)),

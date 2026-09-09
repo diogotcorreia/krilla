@@ -46,22 +46,6 @@ impl Annotation {
         }
     }
 
-    /// Create a new widget annotation with some alt text.
-    ///
-    /// Note that the alt text might be required in some cases, for example
-    /// when exporting to PDF/UA.
-    pub fn new_widget(
-        widget: impl Into<WidgetAnnotationKind>,
-        alt_text: Option<String>,
-    ) -> Self {
-        Self {
-            annotation_type: AnnotationType::Widget(widget.into()),
-            alt: alt_text,
-            struct_parent: None,
-            location: None,
-        }
-    }
-
     /// Sets the location of the annotation.
     pub fn with_location(mut self, location: Option<Location>) -> Self {
         self.location = location;
@@ -99,6 +83,12 @@ impl Annotation {
         root_ref: Ref,
         page_height: f32,
     ) -> KrillaResult<()> {
+        if self.annotation_type.can_have_alt_text()
+            && self.alt.as_ref().is_none_or(String::is_empty)
+        {
+            sc.register_validation_error(ValidationError::MissingAnnotationAltText(self.location));
+        }
+
         let mut annotation = self.annotation_type.serialize_type(
             sc,
             chunk_container,
@@ -113,10 +103,6 @@ impl Annotation {
 
         if let Some(alt_text) = &self.alt {
             annotation.contents(TextStr(alt_text));
-        }
-
-        if self.alt.as_ref().is_none_or(String::is_empty) {
-            sc.register_validation_error(ValidationError::MissingAnnotationAltText(self.location));
         }
 
         annotation.finish();
@@ -150,6 +136,11 @@ impl AnnotationType {
                 w.serialize_type(sc, chunk_container, root_ref, page_height, location)
             }
         }
+    }
+
+    fn can_have_alt_text(&self) -> bool {
+        // Widget annotations provide alt text via the TU field or the structure element attribute Alt
+        !matches!(self, AnnotationType::Widget(_))
     }
 }
 
