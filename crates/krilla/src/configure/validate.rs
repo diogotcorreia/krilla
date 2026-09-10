@@ -164,6 +164,8 @@ pub enum VersionedFeature {
     HeaderFooterArtifactSubtypes,
     /// Scope attribute for table header cells.
     TableHeaderScope,
+    /// "Radios in Unison" flag on radio form field.
+    RadiosInUnison,
 }
 
 impl VersionedFeature {
@@ -173,6 +175,7 @@ impl VersionedFeature {
             VersionedFeature::StructureOrderTabbing => PdfVersion::Pdf15,
             VersionedFeature::HeaderFooterArtifactSubtypes => PdfVersion::Pdf17,
             VersionedFeature::TableHeaderScope => PdfVersion::Pdf15,
+            VersionedFeature::RadiosInUnison => PdfVersion::Pdf15,
         }
     }
 }
@@ -577,7 +580,8 @@ impl Archival {
                 | ValidationError::RequiresNewerPdfVersion(
                     VersionedFeature::HeaderFooterArtifactSubtypes
                     | VersionedFeature::StructureOrderTabbing
-                    | VersionedFeature::TableHeaderScope,
+                    | VersionedFeature::TableHeaderScope
+                    | VersionedFeature::RadiosInUnison,
                     _,
                 ),
             ) => false,
@@ -625,7 +629,8 @@ impl Archival {
                 | ValidationError::RequiresNewerPdfVersion(
                     VersionedFeature::HeaderFooterArtifactSubtypes
                     | VersionedFeature::StructureOrderTabbing
-                    | VersionedFeature::TableHeaderScope,
+                    | VersionedFeature::TableHeaderScope
+                    | VersionedFeature::RadiosInUnison,
                     _,
                 ),
             ) => false,
@@ -707,7 +712,8 @@ impl Archival {
                 | ValidationError::RequiresNewerPdfVersion(
                     VersionedFeature::HeaderFooterArtifactSubtypes
                     | VersionedFeature::StructureOrderTabbing
-                    | VersionedFeature::TableHeaderScope,
+                    | VersionedFeature::TableHeaderScope
+                    | VersionedFeature::RadiosInUnison,
                     _,
                 ),
             ) => false,
@@ -1134,7 +1140,8 @@ impl Accessibility {
                 | ValidationError::RequiresNewerPdfVersion(
                     VersionedFeature::HeaderFooterArtifactSubtypes
                     | VersionedFeature::StructureOrderTabbing
-                    | VersionedFeature::TableHeaderScope,
+                    | VersionedFeature::TableHeaderScope
+                    | VersionedFeature::RadiosInUnison,
                     _,
                 ),
             ) => true,
