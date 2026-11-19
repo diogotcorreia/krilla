@@ -324,8 +324,8 @@ fn forms_signature(d: &mut Document) {
     surface.finish();
 
     let mut signature_field = FormField::signature("signature_field".to_string());
-    signature_field.set_alt_name("A signature field".to_string());
-    signature_field.set_mapping_name("signature1".to_string());
+    signature_field.set_alt_name(Some("A signature field".to_string()));
+    signature_field.set_mapping_name(Some("signature1".to_string()));
 
     let signature_widget =
         signature_field.new_widget(Rect::from_xywh(50.0, 0.0, 10.0, 10.0).unwrap(), appearance);
